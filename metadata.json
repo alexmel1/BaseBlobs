@@ -1,0 +1,6 @@
+{
+  "name": "BaseBlobs",
+  "description": "A premium idle/collector game on Base L2 blockchain where you summon, level up, and evolve glossy virtual blobs, sending them on timed expeditions to collect currency.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
