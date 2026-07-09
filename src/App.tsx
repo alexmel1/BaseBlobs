@@ -176,7 +176,10 @@ export default function App() {
             nextId: parsed.nextId || parsed.blobs.length + 1,
             activeExpedition: parsed.activeExpedition || null,
             activeExpeditions: parsed.activeExpeditions || (parsed.activeExpedition ? [parsed.activeExpedition] : []),
+<<<<<<< HEAD
             verifiedTxHashes: parsed.verifiedTxHashes || [],
+=======
+>>>>>>> 6db1c6ab41a03b7b0d00b974d9d59bb190bb1446
           };
         }
       }
@@ -1191,6 +1194,7 @@ export default function App() {
             </span>
             <span className="font-mono tracking-wider uppercase text-[7.5px] text-slate-300">Base Chain</span>
           </div>
+<<<<<<< HEAD
           <button
             onClick={() => setIsBuilderHubOpen(true)}
             className="flex items-center gap-1 px-2 py-0.5 bg-indigo-600/20 hover:bg-indigo-600/30 active:scale-95 border border-indigo-500/25 rounded-full text-[7px] font-bold text-indigo-300 hover:text-indigo-200 cursor-pointer transition-all font-mono"
@@ -1198,6 +1202,8 @@ export default function App() {
             <Code className="w-2 h-2 text-indigo-400" />
             <span>Builder Station 💠</span>
           </button>
+=======
+>>>>>>> 6db1c6ab41a03b7b0d00b974d9d59bb190bb1446
         </div>
         <button
           onClick={() => setIsWalletModalOpen(true)}
@@ -2352,6 +2358,7 @@ export default function App() {
         onConfirmSummon={handleExecuteSummon}
         cubes={state.cubes}
         directRevealPersonality={directRevealPersonality}
+<<<<<<< HEAD
         rawWalletAddress={rawWalletAddress}
         triggerToast={triggerToast}
       />
@@ -2364,6 +2371,8 @@ export default function App() {
         state={state}
         updateState={updateState}
         triggerToast={triggerToast}
+=======
+>>>>>>> 6db1c6ab41a03b7b0d00b974d9d59bb190bb1446
       />
 
       {/* Custom notification Toast */}

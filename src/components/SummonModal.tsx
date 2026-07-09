@@ -10,9 +10,7 @@ import { P, getBlobStats } from '../data';
 import { PersonalityType } from '../types';
 import { playTapSound, playExpeditionCompleteSound } from '../utils/audio';
 import { BlobCanvas } from './BlobCanvas';
-
 import { NETWORKS } from './BuilderHubModal';
-
 interface SummonModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,7 +30,6 @@ export const SummonModal: React.FC<SummonModalProps> = ({
   rawWalletAddress,
   triggerToast
 }) => {
-  const [stage, setStage] = useState<'prepare' | 'signing' | 'egg' | 'crack' | 'reveal'>('prepare');
   const [rolledPersonality, setRolledPersonality] = useState<PersonalityType | null>(null);
   const [clicks, setClicks] = useState(0);
   const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; size: number; color: string; angle: number; char: string }>>([]);
@@ -53,6 +50,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
 
   useEffect(() => {
     if (stage === 'signing') {
+<<<<<<< HEAD
       const executeTx = async () => {
         const provider = (window as any).ethereum;
         if (provider && rawWalletAddress) {
