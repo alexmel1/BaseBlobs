@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /saves/{saveId} {
+      allow read: if true;
+
+      // Первое создание сейва для нового кошелька
+      allow create: if
+        request.resource.data.rev == 1 &&
+        request.resource.data.cubes is number &&
+        request.resource.data.cubes >= 0;
+
+      // Обновление существующего сейва
+      allow update: if
+        // rev обязан расти ровно на 1 — та же защита от гонки, что и на клиенте,
+        // но теперь её нельзя обойти напрямую через API
+        request.resource.data.rev == resource.data.rev + 1 &&
+
+        // кубы — неотрицательное число
+        request.resource.data.cubes is number &&
+        request.resource.data.cubes >= 0 &&
+
+        // разумный потолок скачка кубов за одно сохранение (подобрать под реальную экономику)
+        request.resource.data.cubes <= resource.data.cubes + 20000 &&
+
+        // накопительные счётчики за всё время не могут уменьшаться
+        request.resource.data.totalCubesAllTime is number &&
+        request.resource.data.totalCubesAllTime >= resource.data.totalCubesAllTime &&
+        request.resource.data.totalExpeditionsAllTime is number &&
+        request.resource.data.totalExpeditionsAllTime >= resource.data.totalExpeditionsAllTime &&
+
+        // и по ним тоже разумный потолок скачка за раз
+        request.resource.data.totalCubesAllTime <= resource.data.totalCubesAllTime + 20000 &&
+        request.resource.data.totalExpeditionsAllTime <= resource.data.totalExpeditionsAllTime + 10;
+
+      allow delete: if false;
+    }
+
+    match /nodes/{nodeId} {
+      allow read: if true;
+      allow write: if true; // Network Map — отдельная задача на будущее, не трогаем сейчас
+    }
+
+    match /leaderboard/{docId} {
+      allow read: if true;
+      allow write: if true; // отдельная задача на будущее
+    }
+
+    match /og_badges/{docId} {
+      allow read, write: if true;
+    }
+
+    match /arena/{docId} {
+      allow read, write: if true;
+    }
+
+    match /reactor_global/{docId} {
+      allow read: if true;
+      allow write: if true; // отдельная задача, когда будете переделывать Reactor под смарт-контракт
+    }
+
+    match /reactor_contributions/{docId} {
+      allow read: if true;
+
+      allow create: if
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.amount <= 10000; // потолок разового вклада — сверить с реальным лимитом в игре
+
+      allow update: if false; // вклад одноразовый, задним числом не меняется
+      allow delete: if false;
+    }
+  }
+}
