@@ -131,8 +131,14 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
               <h3>Upgrade Branches</h3>
             </div>
             <p className="text-slate-300">
-              Spend Cubes to upgrade any Blob along three independent branches:
+              Every Blob is born with its own random set of <strong className="text-white">3 branches out of 7</strong>.
+              The set is fixed at summon and can never be rerolled — so two Blobs of the same
+              personality can play completely differently. Each branch goes up to level 5.
             </p>
+
+            <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400 pt-1">
+              Farm branches
+            </div>
             <ul className="space-y-1.5 text-[11px] font-mono">
               <li className="bg-black/20 p-2 rounded-xl border border-white/5">
                 <strong className="text-amber-400">Harvest:</strong> Increases base Cube yield from Expeditions.
@@ -143,10 +149,62 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
               <li className="bg-black/20 p-2 rounded-xl border border-white/5">
                 <strong className="text-yellow-400">Fortune:</strong> Increases LUCK-based crit chance for double rewards.
               </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-violet-400">Insight:</strong> More XP per Expedition — up to +65% at max.
+              </li>
             </ul>
+
+            <div className="text-[10px] font-black uppercase tracking-wider text-orange-400 pt-1">
+              Combat branches
+            </div>
+            <ul className="space-y-1.5 text-[11px] font-mono">
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-rose-400">Vigor:</strong> Raw POWER multiplier — helps both attack and defense.
+              </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-blue-400">Guard:</strong> Strengthens the defense of Nodes this Blob holds.
+              </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-orange-400">Ferocity:</strong> Stronger when attacking someone else's Node.
+              </li>
+            </ul>
+
             <p className="text-slate-400 text-[11px]">
-              Higher upgrade tiers unlock as your Blob levels up.
+              Every Blob is guaranteed at least one Farm and one Combat branch. Higher tiers
+              unlock as the Blob levels up; how many branches you can develop at once depends
+              on evolution stage (1 at Base, 2 at Glow, 3 at Crystal).
             </p>
+          </div>
+
+          {/* Section 4b: Expedition Events */}
+          <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-4 space-y-2.5">
+            <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <span className="text-base">🎲</span>
+              <h3>Expedition Events</h3>
+            </div>
+            <p className="text-slate-300">
+              Every completed Expedition rolls one event on settlement:
+            </p>
+            <ul className="space-y-1.5 text-[11px] font-mono">
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-slate-300">✅ Safe Return (40%):</strong> Standard payout.
+              </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-emerald-400">💎 Rich Vein (25%):</strong> ×1.5 Cubes.
+              </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-sky-400">🌩️ Data Storm (12%):</strong> ×0.85 Cubes, but ×1.3 XP — a trade, not a loss.
+              </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-pink-400">🎁 Blob Charm (11%):</strong> Next Expedition pays double Cubes.
+              </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-violet-400">🔮 Awakening (8%):</strong> Double XP.
+              </li>
+              <li className="bg-black/20 p-2 rounded-xl border border-white/5">
+                <strong className="text-amber-400">👑 Jackpot (4%):</strong> ×3 Cubes and ×1.5 XP.
+              </li>
+            </ul>
           </div>
 
           {/* Section 5: Expeditions */}
@@ -171,7 +229,10 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
             </p>
             <div className="space-y-2 text-[11px]">
               <div className="bg-black/20 p-2.5 rounded-xl border border-white/5">
-                <span className="font-bold text-red-400 font-mono">Attacking:</span> <span className="text-slate-300">Your Blob's POWER is checked against the node's defense. Higher POWER = guaranteed capture. Within 75-100% of their defense = coin-flip odds. Below that = attempt fails.</span>
+                <span className="font-bold text-red-400 font-mono">Attacking:</span> <span className="text-slate-300">Your Blob's POWER (boosted by Vigor, then by Ferocity when attacking) is checked against the node's defense. Higher = guaranteed capture. Within 75-100% of their defense = coin-flip odds. Below that = attempt fails.</span>
+              </div>
+              <div className="bg-black/20 p-2.5 rounded-xl border border-white/5">
+                <span className="font-bold text-blue-400 font-mono">Defending:</span> <span className="text-slate-300">A node is defended by the POWER of the Blob that captured it. If that Blob has the Guard branch, its defense is multiplied — up to +70% at max level.</span>
               </div>
               <div className="bg-black/20 p-2.5 rounded-xl border border-white/5">
                 <span className="font-bold text-blue-400 font-mono">Fortification:</span> <span className="text-slate-300">The longer you hold a node, the more fortified it gets — up to +50% extra defense after several days of continuous ownership. Long-term holders are genuinely harder to dislodge.</span>
@@ -201,7 +262,8 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
             </div>
             <ul className="space-y-1.5 text-slate-300 text-[11px] list-disc list-inside">
               <li>Keep Expeditions and Node collection cycling — idle yield compounds fast.</li>
-              <li>Split upgrade investment based on your current strategy: raw Cube farming (Harvest), faster cycles (Speed), or crit-chasing (Fortune).</li>
+              <li>Check each Blob's branch set before investing — a Blob with Vigor or Ferocity is your Node raider, one with Harvest and Insight is your farmer. Build to what it rolled instead of fighting it.</li>
+              <li>Summon more Blobs to hunt for branch sets you're missing: the roll is fixed at summon and can't be changed later.</li>
               <li>Watch for open Reactor events — limited-time window to convert Cubes into real $BLOBS.</li>
             </ul>
           </div>

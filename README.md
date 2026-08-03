@@ -42,7 +42,7 @@ Expeditions → Cubes → Upgrades → Blob Collection → Network Nodes → Rea
 Players:
 - send Blobs on expeditions across 6 unique zones
 - collect 💠 Cubes and XP
-- level up Blobs and upgrade their abilities (Speed / Harvest / Fortune)
+- level up Blobs and upgrade them along the branches each one rolled at summon
 - capture and defend Network Nodes for passive income
 - summon new Blobs and expand their collection
 - contribute Cubes to community Reactor events to earn real **$BLOBS** tokens on Base
@@ -92,18 +92,48 @@ Random events can fire on Expedition completion (bonus multipliers, rare drops, 
 
 # ⬆️ Upgrade System
 
-Each Blob has **3 upgrade branches**, each with 5 levels. Slots unlock through evolution.
+Every Blob is born with its **own random set of 3 branches out of 7**. The set is rolled server-side at summon and can never be rerolled — two Blobs of the same personality can play completely differently. Each branch has 5 levels.
+
+Every Blob is guaranteed at least one Farm and one Combat branch, so no Blob is ever useless in either mode.
+
+## 🌾 Farm branches
 
 | Branch | Effect | Max Bonus |
 |--------|--------|-----------|
 | ⚡ Speed | Reduces expedition time | −45% |
 | 💰 Harvest | More cubes per expedition | +75% |
 | 🍀 Fortune | Increases crit chance for double cube rewards | +30% |
+| 📚 Insight | More XP per expedition | +65% |
 
-**Upgrade slot progression:**
-- **Lv. 1** → 1 branch available
-- **Lv. 5** → 2 branches available
-- **Lv. 10** → All 3 branches available
+## ⚔️ Combat branches
+
+Combat branches drive POWER — used for Network Node capture, and for the upcoming Arena.
+
+| Branch | Effect | Max Bonus |
+|--------|--------|-----------|
+| 💢 Vigor | Raw POWER multiplier (attack *and* defense) | +52% |
+| 🛡️ Guard | Strengthens defense of nodes this Blob holds | +70% |
+| 🔥 Ferocity | Stronger when attacking someone else's node | +70% |
+
+**Upgrade slot progression** — how many branches you can develop at once:
+- **Lv. 1** → 1 branch
+- **Lv. 5** → 2 branches
+- **Lv. 10** → all 3 branches
+
+---
+
+# 🎲 Expedition Events
+
+Every completed expedition rolls one event on settlement:
+
+| Event | Chance | Effect |
+|-------|--------|--------|
+| ✅ Safe Return | 40% | Standard payout |
+| 💎 Rich Vein | 25% | ×1.5 Cubes |
+| 🌩️ Data Storm | 12% | ×0.85 Cubes, ×1.3 XP — a trade, not a loss |
+| 🎁 Blob Charm | 11% | Next expedition pays double Cubes |
+| 🔮 Awakening | 8% | Double XP |
+| 👑 Jackpot | 4% | ×3 Cubes, ×1.5 XP |
 
 ---
 
@@ -151,7 +181,8 @@ Reset every 24 hours:
 
 Map-based locations that generate passive Cubes once captured (accumulates up to 24h of income — collect regularly).
 
-- **Attacking:** your Blob's Power is checked against the node's defense — a clear Power advantage guarantees capture, a close match is a coin flip.
+- **Attacking:** your Blob's Power (raised by Vigor, then by Ferocity when attacking) is checked against the node's defense — a clear advantage guarantees capture, a close match is a coin flip.
+- **Defending:** a node is held by the Power of the Blob that captured it, multiplied by that Blob's Guard branch (up to +70%).
 - **Fortification:** the longer you hold a node, the more fortified it becomes (up to +50% extra defense after several days of continuous ownership).
 - **Cooldown:** a short cooldown after each attack attempt prevents back-to-back spam attacks on the same node.
 
@@ -169,7 +200,7 @@ A recurring, community-wide event: contribute Cubes toward a shared pool target.
 |--------|---------|
 | 🏠 **Home** | Your main Blob, XP bar, energy, My Blobs collection |
 | 🗺 **Explore** | Expedition zones with tier badges, timers, rewards |
-| ⬆️ **Upgrades** | Speed / Harvest / Fortune branches + evolution status |
+| ⬆️ **Upgrades** | The 3 branches this Blob rolled + evolution status |
 | 🛒 **Shop** | Blob summon |
 | 📋 **Quests** | Daily quests with Cube + XP rewards |
 | ❓ **FAQ** | In-app guide to every game mechanic |
@@ -203,6 +234,26 @@ A recurring, community-wide event: contribute Cubes toward a shared pool target.
 | Blob NFT mint | 🔜 Planned, not yet live |
 
 **Wallet support:** Any wallet supported via WalletConnect (Reown) — including Coinbase / Base App and MetaMask.
+
+**Wallet discipline:** the app never opens your wallet on its own. Signature requests happen only in response to a deliberate action — background syncs, tab focus and polling all run read-only and stay silent when a session has expired.
+
+---
+
+# 🆕 Latest Updates
+
+- **Per-Blob upgrade branches** — 7 branches total, each Blob rolls its own 3 at summon. Farm vs Combat split, guaranteed one of each. Existing Blobs keep Speed / Harvest / Fortune, so nothing invested is lost.
+- **Combat branches** — Vigor, Guard and Ferocity now feed real Node combat maths (attack, defense, fortification) and are the foundation for the upcoming Arena.
+- **Data Storm rebalanced** — was a flat −30% Cube punishment, now a trade: ×0.85 Cubes for ×1.3 XP. Jackpot, Awakening and Blob Charm all got slightly more common.
+- **Reactor is a full screen** — no longer a blocking modal; navigate freely from the bottom bar like every other section.
+- **Reworked Home** — accurate Blob stat card (the old one advertised bonuses that did not exist), per-Blob XP bars on every card, and calmer primary actions.
+
+# 🔭 Planned
+
+- ⚔️ **Arena** — weekly PvP ladder built on the Combat branches
+- 🏆 **Leaderboards**
+- 🍖 **Blob feeding / mood** — mood already affects Power; the feeding loop is not wired up yet
+- 🧬 **Traits** — data is in place, not yet granted to Blobs
+- 🖼️ **Blob NFT mint**
 
 ---
 

@@ -5,9 +5,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Zap, Flame, Shield, Database, Code, X, Atom, Loader2 } from 'lucide-react';
-import { P, getBlobStats } from '../data';
-import { PersonalityType } from '../types';
+import { Sparkles, X, Atom, Loader2, Code, Database } from 'lucide-react';
+import { P, UPGRADES } from '../data';
+import { PersonalityType, UpgradeBranchId } from '../types';
 import { playTapSound } from '../utils/audio';
 import { BlobCanvas } from './BlobCanvas';
 
@@ -18,18 +18,21 @@ interface SummonModalProps {
   cubes: number;
   currentBlobCount?: number;
   directRevealPersonality?: PersonalityType | null;
+  /** Ветки, выпавшие только что призванному блобу — показываем в ревиле */
+  revealBranches?: UpgradeBranchId[] | null;
   rawWalletAddress?: string | null;
   triggerToast?: (msg: string) => void;
   updateState?: any;
 }
 
-export const SummonModal: React.FC<SummonModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  onConfirmSummon, 
-  cubes, 
+export const SummonModal: React.FC<SummonModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirmSummon,
+  cubes,
   currentBlobCount = 0,
   directRevealPersonality,
+  revealBranches,
   rawWalletAddress,
   triggerToast,
   updateState
@@ -90,7 +93,8 @@ export const SummonModal: React.FC<SummonModalProps> = ({
   if (!isOpen) return null;
 
   const bp = rolledPersonality ? (P[rolledPersonality] || P.happy) : P.happy;
-  const stats = rolledPersonality ? getBlobStats(rolledPersonality, 1) : getBlobStats('happy', 1);
+  // Ветки блоба приходят с сервера — роллятся только там
+  const rolledBranches = UPGRADES.filter((u) => (revealBranches || []).includes(u.id));
 
   return (
     <AnimatePresence>
@@ -301,35 +305,52 @@ export const SummonModal: React.FC<SummonModalProps> = ({
                   </div>
                 </div>
 
-                {/* Companion Base Stats */}
-                <div className="grid grid-cols-3 gap-2 bg-slate-900/50 border border-white/5 rounded-2xl p-3 text-center">
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-[9px] text-slate-400 font-semibold uppercase tracking-wider font-mono">
-                      <Flame className="w-3 h-3 text-red-400" />
-                      <span>Pow</span>
-                    </div>
-                    <div className="text-white font-mono text-sm font-black mt-1">
-                      {stats.power}
-                    </div>
+                {/* Rolled upgrade branches — the actual reveal moment */}
+                <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-3">
+                  <div className="text-[10px] font-black text-[#00cfff] uppercase tracking-wider mb-2 font-mono flex items-center justify-between">
+                    <span>Upgrade Branches</span>
+                    <span className="text-slate-500">
+                      {rolledBranches.length}/{UPGRADES.length}
+                    </span>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-[9px] text-slate-400 font-semibold uppercase tracking-wider font-mono">
-                      <Zap className="w-3 h-3 text-cyan-400" />
-                      <span>Spd</span>
+
+                  {rolledBranches.length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                      {rolledBranches.map((branch) => (
+                        <div
+                          key={branch.id}
+                          className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 border text-left"
+                          style={{
+                            background: `${branch.color}12`,
+                            borderColor: `${branch.color}44`,
+                          }}
+                        >
+                          <span className="text-sm leading-none">{branch.icon}</span>
+                          <span className="text-white text-[11px] font-bold flex-1">
+                            {branch.name}
+                          </span>
+                          <span
+                            className="text-[7.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full border"
+                            style={{
+                              color: branch.kind === 'combat' ? '#ff9a6b' : '#6ee7b7',
+                              background: branch.kind === 'combat' ? 'rgba(255,122,47,0.12)' : 'rgba(27,175,122,0.12)',
+                              borderColor: branch.kind === 'combat' ? 'rgba(255,122,47,0.35)' : 'rgba(27,175,122,0.35)',
+                            }}
+                          >
+                            {branch.kind === 'combat' ? 'Combat' : 'Farm'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="text-white font-mono text-sm font-black mt-1">
-                      {stats.speed}
+                  ) : (
+                    <div className="text-slate-500 text-[10px] font-mono py-1">
+                      Open the Upgrades screen to see this Blob's branches.
                     </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-center gap-1 text-[9px] text-slate-400 font-semibold uppercase tracking-wider font-mono">
-                      <Shield className="w-3 h-3 text-emerald-400" />
-                      <span>Lck</span>
-                    </div>
-                    <div className="text-white font-mono text-sm font-black mt-1">
-                      {stats.luck}
-                    </div>
-                  </div>
+                  )}
+
+                  <p className="text-slate-500 text-[8.5px] font-mono mt-2 leading-relaxed">
+                    This set is unique to this Blob and cannot be rerolled.
+                  </p>
                 </div>
 
                 {/* Close Button */}

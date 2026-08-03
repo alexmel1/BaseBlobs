@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 import { GameState, Blob, ActiveExpedition, PersonalityType, ExpeditionEventType, TraitId, UpgradeBranchId } from './types';
-import { P, PKEYS, ZONES, XP4LV, EREGEN, getBlobStats, getEvolutionStage, EVOLUTION_EMOJIS, EVOLUTION_NAMES, UPGRADES, canUpgrade, getUpgradeSlots, applyUpgrades, getBlobBranches, DEFAULT_BRANCHES, DEFAULT_NEW_BLOB_FIELDS, DEFAULT_GAMESTATE_NEW_FIELDS, DEFAULT_BLOB_MOOD, EXPEDITION_EVENTS, EVENT_WEIGHTS } from './data';
+import { P, PKEYS, ZONES, XP4LV, EREGEN, getBlobStats, getEvolutionStage, EVOLUTION_EMOJIS, EVOLUTION_NAMES, UPGRADES, canUpgrade, getUpgradeSlots, applyUpgrades, getBlobBranches, calcBlobPower, DEFAULT_BRANCHES, DEFAULT_NEW_BLOB_FIELDS, DEFAULT_GAMESTATE_NEW_FIELDS, DEFAULT_BLOB_MOOD, EXPEDITION_EVENTS, EVENT_WEIGHTS } from './data';
 import { BackgroundCanvas } from './components/BackgroundCanvas';
 import { BlobCanvas } from './components/BlobCanvas';
 import { PlatformCanvas } from './components/PlatformCanvas';
@@ -241,6 +241,8 @@ export default function App() {
   // Summoning Celebration State
   const [isSummonModalOpen, setIsSummonModalOpen] = useState(false);
   const [directRevealPersonality, setDirectRevealPersonality] = useState<PersonalityType | null>(null);
+  // Ветки только что призванного блоба — показываются в окне призыва
+  const [revealBranches, setRevealBranches] = useState<UpgradeBranchId[] | null>(null);
 
   // Level Up State
   const [levelUpInfo, setLevelUpInfo] = useState<{
@@ -930,6 +932,8 @@ export default function App() {
       if (res.ok && updated) {
         const validated = validateAndMigrateState(updated);
         syncAndSetState(validated);
+        // Ветки берём из ответа сервера: там они и были сролены
+        setRevealBranches(updated.newBlob ? getBlobBranches(updated.newBlob) : null);
         return updated.randomPersonality || updated.newBlob?.personality || null;
       } else {
         throw new Error(updated.error || 'Server error');
@@ -970,6 +974,7 @@ export default function App() {
         syncAndSetState(validated);
         setPreviewPersonality(null);
         setDirectRevealPersonality(personality);
+        setRevealBranches(updated.newBlob ? getBlobBranches(updated.newBlob) : null);
         setIsSummonModalOpen(true);
       } else {
         triggerToast(`❌ Unlock failed: ${updated.error || 'Server error'}`);
@@ -1609,8 +1614,8 @@ export default function App() {
               )}
             </div>
 
-            {/* Call To Actions Block (matching Phone 1) */}
-            <div className="flex flex-col px-4 mb-3 flex-shrink-0">
+            {/* Primary actions — Expedition, plus node collect when relevant */}
+            <div className="flex flex-col gap-2 px-4 mb-3 flex-shrink-0">
               <button
                 onClick={() => {
                   setCurrentScreen('expeditions');
@@ -1623,73 +1628,76 @@ export default function App() {
                     return prev;
                   });
                 }}
-                className="relative overflow-hidden w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#0044ff] via-[#008cff] to-[#00cfff] hover:brightness-110 active:scale-[0.98] text-white transition-all duration-300 shadow-xl shadow-blue-600/25 border border-cyan-400/35 cursor-pointer text-left flex items-center justify-between group"
+                className="group relative w-full flex items-center gap-3 p-3 rounded-2xl bg-[#060c24]/90 border border-[#00cfff]/25 hover:border-[#00cfff]/55 active:scale-[0.985] transition-all duration-200 cursor-pointer text-left overflow-hidden"
+                style={{ boxShadow: '0 0 20px rgba(0,207,255,0.07)' }}
               >
-                {/* Neon accent glow overlay */}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_right,rgba(0,255,255,0.25)_0%,transparent_60%)] pointer-events-none group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
+                {/* Left accent bar instead of a full gradient fill */}
+                <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-[#0052ff] to-[#00cfff]" />
 
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className="w-9 h-9 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner transition-transform duration-500 group-hover:rotate-12 group-hover:scale-105">
-                    <Compass className="w-5 h-5 text-white animate-spin-slow" />
+                <div className="w-9 h-9 rounded-xl bg-[#00cfff]/10 border border-[#00cfff]/30 flex items-center justify-center flex-shrink-0 group-hover:bg-[#00cfff]/18 transition-colors">
+                  <Compass className="w-4.5 h-4.5 text-[#00cfff]" />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="text-white text-[12px] font-black tracking-tight">
+                    Send on Expedition
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-black tracking-widest uppercase text-white drop-shadow-sm">
-                      Send on Expedition
-                    </span>
-                    <span className="text-[8.5px] font-semibold text-cyan-100/80 tracking-wide font-mono mt-0.5 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-                      Explore L2 zones & harvest Cubes
-                    </span>
+                  <div className="text-slate-500 text-[9px] font-mono mt-0.5 truncate">
+                    {(state.activeExpeditions?.length ?? 0) > 0
+                      ? `${state.activeExpeditions.length} in progress · ${state.energy} ⚡ left`
+                      : `Harvest Cubes & XP · ${state.energy} ⚡ available`}
                   </div>
                 </div>
 
-                <div className="w-7 h-7 rounded-lg bg-black/20 group-hover:bg-black/35 flex items-center justify-center border border-white/5 transition-colors relative z-10">
-                  <span className="text-[10px] font-mono font-black text-white group-hover:translate-x-0.5 transition-transform duration-300">
-                    →
-                  </span>
-                </div>
+                <span className="text-[#00cfff] text-sm font-mono flex-shrink-0 group-hover:translate-x-0.5 transition-transform">
+                  →
+                </span>
               </button>
-            </div>
 
-            {/* Collect All button on Home (pending cubes from all nodes) */}
-            {networkMap.myNodes && networkMap.myNodes.length > 0 && (
-              <div className="px-4 mb-3 flex-shrink-0">
+              {networkMap.myNodes && networkMap.myNodes.length > 0 && (
                 <button
                   onClick={handleCollectAllNodes}
-                  className="relative overflow-hidden w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-400 hover:brightness-110 active:scale-[0.98] text-white transition-all duration-300 shadow-xl shadow-emerald-600/25 border border-emerald-400/35 cursor-pointer text-left flex items-center justify-between group"
+                  disabled={networkMap.totalPending <= 0}
+                  className={`group relative w-full flex items-center gap-3 p-3 rounded-2xl bg-[#03130f]/90 border transition-all duration-200 text-left overflow-hidden ${
+                    networkMap.totalPending > 0
+                      ? 'border-emerald-400/30 hover:border-emerald-400/60 active:scale-[0.985] cursor-pointer'
+                      : 'border-white/8 opacity-55 cursor-not-allowed'
+                  }`}
+                  style={networkMap.totalPending > 0 ? { boxShadow: '0 0 20px rgba(16,185,129,0.07)' } : undefined}
                 >
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_right,rgba(16,185,129,0.25)_0%,transparent_60%)] pointer-events-none group-hover:opacity-100 transition-opacity duration-300" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
+                  <span
+                    className={`absolute left-0 top-0 bottom-0 w-[3px] ${
+                      networkMap.totalPending > 0
+                        ? 'bg-gradient-to-b from-emerald-500 to-teal-300'
+                        : 'bg-white/10'
+                    }`}
+                  />
 
-                  <div className="flex items-center gap-3 relative z-10">
-                    <div className="w-9 h-9 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner">
-                      <span className="text-xl">🌐</span>
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-400/25 flex items-center justify-center flex-shrink-0 text-base">
+                    🌐
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white text-[12px] font-black tracking-tight">
+                      Collect Node Income
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-[11px] font-black tracking-widest uppercase text-white drop-shadow-sm">
-                        Collect All Node Income
-                      </span>
-                      <span className="text-[8.5px] font-semibold text-emerald-100/80 tracking-wide font-mono mt-0.5 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block" />
-                        Holding {networkMap.myNodes.length} {networkMap.myNodes.length === 1 ? 'node' : 'nodes'} · {networkMap.totalPending > 0 ? `Pending: ${networkMap.totalPending} 💠` : 'All collected!'}
-                      </span>
+                    <div className="text-slate-500 text-[9px] font-mono mt-0.5 truncate">
+                      {networkMap.myNodes.length} {networkMap.myNodes.length === 1 ? 'node' : 'nodes'} · {networkMap.totalIncome}/hr
                     </div>
                   </div>
 
-                  {networkMap.totalPending > 0 ? (
-                    <div className="px-3 py-1.5 rounded-xl bg-black/30 border border-emerald-400/30 text-emerald-300 font-mono font-bold text-xs relative z-10 flex items-center gap-1">
-                      <span>+{networkMap.totalPending}</span>
-                      <span>💠</span>
-                    </div>
-                  ) : (
-                    <div className="px-3 py-1.5 rounded-xl bg-black/10 border border-white/10 text-slate-400 font-mono font-bold text-xs relative z-10">
-                      Collected
-                    </div>
-                  )}
+                  <div
+                    className={`px-2.5 py-1 rounded-lg font-mono font-black text-[11px] flex-shrink-0 border ${
+                      networkMap.totalPending > 0
+                        ? 'bg-emerald-500/12 border-emerald-400/35 text-emerald-300'
+                        : 'bg-white/5 border-white/10 text-slate-500'
+                    }`}
+                  >
+                    {networkMap.totalPending > 0 ? `+${formatNumber(networkMap.totalPending)} 💠` : 'Empty'}
+                  </div>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Owned Blobs section */}
             <div className="px-4 py-2 flex-shrink-0">
@@ -1799,62 +1807,141 @@ export default function App() {
               </div>
             )}
 
-            {/* Active expedition reminder on Home */}
-            {state.activeExpeditions && state.activeExpeditions.length > 0 && (
-              <div className="mx-4 mt-2">
-                {state.activeExpeditions.slice(0, 2).map((exp: any) => {
-                  const timeLeft = exp.endTime - Date.now();
-                  if (timeLeft <= 0) return null;
-                  const mins = Math.floor(timeLeft / 60000);
-                  const secs = Math.floor((timeLeft % 60000) / 1000);
-                  return (
-                    <div key={exp.id ?? exp.zoneId} className="flex items-center gap-2 p-2.5 rounded-xl border border-white/8 bg-white/3 mb-1.5">
-                      <span className="text-sm">🗺️</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-xs font-semibold truncate">{exp.zoneName ?? exp.zoneId}</p>
-                      </div>
-                      <span className="text-[#00cfff] text-xs font-bold tabular-nums">
-                        {mins > 0 ? `${mins}m ${secs}s` : `${secs}s`}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Selected Blob Personality Details Panel */}
+            {/* Selected Blob — stat card */}
             {currentSelectedBlob && (() => {
               const stats = getBlobStats(currentSelectedBlob.personality, currentSelectedBlob.level);
+              const evoStage = getEvolutionStage(currentSelectedBlob.level);
+              const combatPower = calcBlobPower(currentSelectedBlob);
+              // Подписи повторяют серверные формулы (api/claim.ts):
+              // время — avgSpeed × 0.003, крит — avgLuck × 0.0015. Раньше
+              // здесь стояли произвольные множители и панель врала игроку.
+              const timeCut = Math.min(50, stats.speed * 0.3);
+              const critChance = Math.min(50, stats.luck * 0.15);
+              const xpMax = XP4LV(currentSelectedBlob.level);
+              const xpPct = currentSelectedBlob.level >= 20
+                ? 100
+                : Math.min(100, Math.round((currentSelectedBlob.xp / xpMax) * 100));
+              const branches = UPGRADES.filter((u) => getBlobBranches(currentSelectedBlob).includes(u.id));
+
               return (
-                <div className="mx-4 mt-2 mb-6 bg-black/40 border border-white/5 rounded-2xl p-3.5 flex flex-col gap-3 backdrop-blur-md">
-                  <div className="flex items-center gap-3.5">
-                    <span className="text-3xl leading-none">{currentSelectedBlobInfo.emoji}</span>
-                    <div className="flex-1">
-                      <h4 className="text-white text-xs font-bold">
-                        {currentSelectedBlobInfo.name} <span className="text-slate-400 font-normal">(Lv.{currentSelectedBlob.level})</span>
-                      </h4>
-                      <p className="text-slate-400 text-[10px] mt-1 leading-relaxed font-mono">
-                        Bonus: {currentSelectedBlobInfo.bonus}
+                <div
+                  className="mx-4 mt-2 mb-6 rounded-2xl border backdrop-blur-md overflow-hidden"
+                  style={{
+                    borderColor: `${currentSelectedBlobInfo.glow}33`,
+                    background: `linear-gradient(160deg, ${currentSelectedBlobInfo.glow}0f, rgba(2,6,23,0.55) 55%)`,
+                    boxShadow: `0 0 28px ${currentSelectedBlobInfo.glow}14`,
+                  }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center gap-3 p-3.5 pb-3">
+                    <div
+                      className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 border"
+                      style={{
+                        background: `${currentSelectedBlobInfo.glow}18`,
+                        borderColor: `${currentSelectedBlobInfo.glow}44`,
+                      }}
+                    >
+                      {currentSelectedBlobInfo.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-white text-sm font-black tracking-tight truncate">
+                          {currentSelectedBlobInfo.name}
+                        </h4>
+                        <span
+                          className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full border flex-shrink-0"
+                          style={{
+                            color: currentSelectedBlobInfo.glow,
+                            borderColor: `${currentSelectedBlobInfo.glow}55`,
+                            background: `${currentSelectedBlobInfo.glow}14`,
+                          }}
+                        >
+                          {EVOLUTION_EMOJIS[evoStage]} {EVOLUTION_NAMES[evoStage].split(' ')[0]}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-[10px] mt-0.5 truncate">
+                        {currentSelectedBlobInfo.bonus}
                       </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-[7px] text-slate-500 font-mono uppercase tracking-wider">Level</div>
+                      <div className="text-white text-base font-black font-mono leading-none">
+                        {currentSelectedBlob.level}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Dynamic Stats Grid with Formula details */}
-                  <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-2.5">
-                    <div className="bg-[#020617]/40 border border-white/5 rounded-xl p-2 flex flex-col items-center justify-center">
-                      <span className="text-[7px] text-slate-400 font-mono tracking-wider uppercase">💪 Power</span>
-                      <span className="text-xs font-black text-emerald-400 mt-1 font-mono">{stats.power}</span>
-                      <span className="text-[7px] text-slate-500 font-mono mt-0.5 text-center leading-none">+{Math.round(stats.power * 0.2 * 10) / 10}% Cubes</span>
+                  {/* XP progress */}
+                  <div className="px-3.5 pb-3">
+                    <div className="flex items-center justify-between text-[8px] font-mono mb-1">
+                      <span className="text-slate-500 uppercase tracking-wider">Experience</span>
+                      <span className="text-slate-400">
+                        {currentSelectedBlob.level >= 20
+                          ? 'MAX LEVEL'
+                          : `${currentSelectedBlob.xp} / ${xpMax} XP`}
+                      </span>
                     </div>
-                    <div className="bg-[#020617]/40 border border-white/5 rounded-xl p-2 flex flex-col items-center justify-center">
-                      <span className="text-[7px] text-slate-400 font-mono tracking-wider uppercase">⚡ Speed</span>
-                      <span className="text-xs font-black text-cyan-400 mt-1 font-mono">{stats.speed}</span>
-                      <span className="text-[7px] text-slate-500 font-mono mt-0.5 text-center leading-none">-{Math.round(Math.min(50, stats.speed * 0.3) * 10) / 10}% Time</span>
+                    <div className="h-1.5 rounded-full bg-slate-800/80 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${xpPct}%`,
+                          background: currentSelectedBlob.level >= 20
+                            ? 'linear-gradient(90deg,#f59e0b,#fbbf24)'
+                            : `linear-gradient(90deg,${currentSelectedBlobInfo.glow}aa,${currentSelectedBlobInfo.glow})`,
+                        }}
+                      />
                     </div>
-                    <div className="bg-[#020617]/40 border border-white/5 rounded-xl p-2 flex flex-col items-center justify-center">
-                      <span className="text-[7px] text-slate-400 font-mono tracking-wider uppercase">🍀 Luck</span>
-                      <span className="text-xs font-black text-amber-400 mt-1 font-mono">{stats.luck}</span>
-                      <span className="text-[7px] text-slate-500 font-mono mt-0.5 text-center leading-none">+{Math.round(stats.luck * 0.4 * 10) / 10}% Crit</span>
+                  </div>
+
+                  {/* Stats — each tile states what the number actually does */}
+                  <div className="grid grid-cols-3 gap-px bg-white/5 border-y border-white/5">
+                    <div className="bg-[#03071a]/80 px-2 py-2.5 flex flex-col items-center">
+                      <span className="text-[7px] text-slate-500 font-mono tracking-wider uppercase">⚔️ Power</span>
+                      <span className="text-sm font-black text-rose-400 mt-1 font-mono leading-none">{combatPower}</span>
+                      <span className="text-[7px] text-slate-500 font-mono mt-1 text-center leading-tight">Nodes &amp; Arena</span>
+                    </div>
+                    <div className="bg-[#03071a]/80 px-2 py-2.5 flex flex-col items-center">
+                      <span className="text-[7px] text-slate-500 font-mono tracking-wider uppercase">⚡ Speed</span>
+                      <span className="text-sm font-black text-cyan-400 mt-1 font-mono leading-none">{stats.speed}</span>
+                      <span className="text-[7px] text-slate-500 font-mono mt-1 text-center leading-tight">−{timeCut.toFixed(1)}% time</span>
+                    </div>
+                    <div className="bg-[#03071a]/80 px-2 py-2.5 flex flex-col items-center">
+                      <span className="text-[7px] text-slate-500 font-mono tracking-wider uppercase">🍀 Luck</span>
+                      <span className="text-sm font-black text-amber-400 mt-1 font-mono leading-none">{stats.luck}</span>
+                      <span className="text-[7px] text-slate-500 font-mono mt-1 text-center leading-tight">+{critChance.toFixed(1)}% crit</span>
+                    </div>
+                  </div>
+
+                  {/* This Blob's own upgrade branches */}
+                  <div className="px-3.5 py-3">
+                    <div className="text-[7px] text-slate-500 font-mono uppercase tracking-wider mb-1.5">
+                      Upgrade branches
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {branches.map((branch) => {
+                        const lvl = currentSelectedBlob.upgrades?.[branch.id] ?? 0;
+                        return (
+                          <div
+                            key={branch.id}
+                            className="flex items-center gap-1 rounded-lg px-2 py-1 border"
+                            style={{
+                              background: `${branch.color}12`,
+                              borderColor: `${branch.color}3d`,
+                            }}
+                            title={branch.desc}
+                          >
+                            <span className="text-[10px] leading-none">{branch.icon}</span>
+                            <span className="text-slate-200 text-[9px] font-bold">{branch.name}</span>
+                            <span
+                              className="text-[8px] font-mono font-black"
+                              style={{ color: lvl > 0 ? branch.color : 'rgba(148,163,184,0.55)' }}
+                            >
+                              {lvl}/5
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -2745,11 +2832,13 @@ export default function App() {
         onClose={() => {
           setIsSummonModalOpen(false);
           setDirectRevealPersonality(null);
+          setRevealBranches(null);
         }}
         onConfirmSummon={handleExecuteSummon}
         cubes={state.cubes}
         currentBlobCount={(state.blobs || []).length}
         directRevealPersonality={directRevealPersonality}
+        revealBranches={revealBranches}
         rawWalletAddress={rawWalletAddress}
         triggerToast={triggerToast}
         updateState={updateState}
