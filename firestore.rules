@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /saves/{saveId} {
+      allow read: if true;
+
+      // Первое создание нового сейва при начальной инициализации
+      allow create: if
+        request.resource.data.rev == 1 &&
+        request.resource.data.cubes == 0;
+
+      // Все обновления экономики (кубы, блобы, экспедиции) заблокированы с клиента — только через /api/claim.ts (Admin SDK)
+      allow update: if false;
+
+      allow delete: if false;
+    }
+
+    match /nodes/{nodeId} {
+      allow read: if true;
+      allow write: if false; // Только через /api/claim.ts (type: attack_node, node)
+    }
+
+    match /leaderboard/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /og_badges/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /arena/{docId} {
+      allow read, write: if true;
+    }
+
+    match /reactor_global/{docId} {
+      allow read: if true;
+      allow write: if false; // Пишется только через /api/claim.ts или /api/reactor-close.ts (Firebase Admin SDK)
+    }
+
+    match /reactor_contributions/{docId} {
+      allow read: if true;
+      allow write: if false; // Пишется только через /api/claim.ts (Firebase Admin SDK)
+    }
+  }
+}
