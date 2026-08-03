@@ -34,7 +34,6 @@ export function ReactorPreview() {
   const [myClaimed, setMyClaimed] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [withError, setWithError] = useState(false);
-  const [open, setOpen] = useState(true);
 
   const progressPercent = Math.min(100, (totalContributed / TARGET) * 100);
   const share = totalContributed > 0 ? myContribution / totalContributed : 0;
@@ -74,7 +73,7 @@ export function ReactorPreview() {
             Reactor preview · dev
           </span>
           <span className="text-[10px] text-slate-500">
-            без кошелька и Firestore
+            no wallet, no Firestore
           </span>
         </div>
 
@@ -138,7 +137,7 @@ export function ReactorPreview() {
         </div>
       </div>
 
-      {open ? (
+      <div className="pt-28">
         <ReactorModal
           phase={phase}
           eventId={7}
@@ -161,18 +160,8 @@ export function ReactorPreview() {
           firestoreError={withError ? 'Missing or insufficient permissions (preview)' : null}
           onContribute={handleContribute}
           onClaim={handleClaim}
-          onClose={() => setOpen(false)}
         />
-      ) : (
-        <div className="pt-32 flex justify-center">
-          <button
-            onClick={() => setOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-blue-600/80 border border-blue-400/40 text-sm font-bold cursor-pointer"
-          >
-            Открыть реактор снова
-          </button>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

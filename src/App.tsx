@@ -120,6 +120,19 @@ export function validateAndMigrateState(parsed: any): GameState {
     ? parsed.selectedId
     : migratedBlobs[0].id;
 
+  // Выбор в пикере экспедиции живёт отдельно от selectedId: раньше он
+  // безусловно перетирался на selectedId, и после каждого ответа сервера
+  // выделение прыгало на первого блоба вместо только что отправленного.
+  const expPickId = migratedBlobs.some((b: any) => b.id === parsed.expPickId)
+    ? parsed.expPickId
+    : selectedId;
+
+  const expPickIds =
+    Array.isArray(parsed.expPickIds) &&
+    parsed.expPickIds.some((id: any) => migratedBlobs.some((b: any) => b.id === id))
+      ? parsed.expPickIds.filter((id: any) => migratedBlobs.some((b: any) => b.id === id))
+      : [expPickId];
+
   return {
     playerName: parsed.playerName || 'Trainer',
     cubes: typeof parsed.cubes === 'number' ? parsed.cubes : 0,
@@ -145,8 +158,8 @@ export function validateAndMigrateState(parsed: any): GameState {
     questsReset: parsed.questsReset || Date.now(),
     blobs: migratedBlobs,
     selectedId: selectedId,
-    expPickId: selectedId,
-    expPickIds: Array.isArray(parsed.expPickIds) && parsed.expPickIds.length > 0 ? parsed.expPickIds : [selectedId],
+    expPickId: expPickId,
+    expPickIds: expPickIds,
     nextId: typeof parsed.nextId === 'number' ? parsed.nextId : migratedBlobs.length + 1,
     activeExpedition: parsed.activeExpedition || null,
     activeExpeditions: Array.isArray(parsed.activeExpeditions) ? parsed.activeExpeditions : (parsed.activeExpedition ? [parsed.activeExpedition] : []),
@@ -215,7 +228,6 @@ export default function App() {
   const [isUpgradesOpen, setIsUpgradesOpen] = useState(false);
   const [previewPersonality, setPreviewPersonality] = useState<PersonalityType | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showReactorModal, setShowReactorModal] = useState(false);
 
   // Summoning Celebration State
   const [isSummonModalOpen, setIsSummonModalOpen] = useState(false);
@@ -1094,10 +1106,26 @@ export default function App() {
       const updated = await res.json();
       if (res.ok && updated) {
         const validated = validateAndMigrateState(updated);
-        syncAndSetState(validated);
+        // Выбор блоба — состояние UI, а не экономики: сервер владеет энергией
+        // и списком экспедиций, но свой selectedId он отдаёт из Firestore,
+        // куда тот попадает лишь через 2-секундный дебаунс автосейва.
+        // Без этого выделение прыгало на первого блоба сразу после отправки.
+        syncAndSetState({
+          ...validated,
+          selectedId: state.selectedId,
+          expPickId: state.expPickId,
+          expPickIds: state.expPickIds,
+        });
         triggerToast(`🚀 ${zone.name} started! -${zone.cost} ⚡`);
       } else {
-        triggerToast(`❌ Failed to start expedition: ${updated.error || 'Server error'}`);
+        const serverError = String(updated?.error || 'Server error');
+        // Анти-спам сервера (1 запрос в секунду) при быстрой отправке блобов
+        // подряд отдавал техническое «Too many requests, slow down».
+        if (/too many requests/i.test(serverError)) {
+          triggerToast('⏳ Too fast — wait a second and try again');
+        } else {
+          triggerToast(`❌ Failed to start expedition: ${serverError}`);
+        }
       }
     } catch (err: any) {
       console.error('Start expedition error:', err);
@@ -1409,7 +1437,7 @@ export default function App() {
           /* Standard Section Headers as shown on screen 2 & 3 */
           <div className="flex items-center gap-1.5">
             <span className="text-sm">
-              {currentScreen === 'expeditions' ? '🗺️' : currentScreen === 'upgrades' ? '⚡' : currentScreen === 'shop' ? '🛍️' : '📋'}
+              {currentScreen === 'expeditions' ? '🗺️' : currentScreen === 'upgrades' ? '⚡' : currentScreen === 'shop' ? '🛍️' : currentScreen === 'reactor' ? '☢️' : '📋'}
             </span>
             <span className="text-white text-xs font-black tracking-tight capitalize">
               {currentScreen}
@@ -1577,6 +1605,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setCurrentScreen('expeditions');
+                  setExploreTab('expeditions');
                   updateState((prev) => {
                     if (prev.selectedId) {
                       prev.expPickId = prev.selectedId;
@@ -1718,6 +1747,21 @@ export default function App() {
                           </span>
                         )}
                       </div>
+                      {blob.level < 20 && (
+                        <div className="w-full mt-0.5 h-1 rounded-full bg-slate-700/60 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(100, Math.round((blob.xp / XP4LV(blob.level)) * 100))}%`,
+                              background: getEvolutionStage(blob.level) >= 2
+                                ? 'linear-gradient(90deg,#f59e0b,#fbbf24)'
+                                : getEvolutionStage(blob.level) === 1
+                                ? 'linear-gradient(90deg,#8b5cf6,#a78bfa)'
+                                : 'linear-gradient(90deg,#0ea5e9,#38bdf8)',
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1978,6 +2022,23 @@ export default function App() {
                         {bp.name}
                       </div>
                       <div className="text-slate-400 text-[8px]">Lv. {blob.level}</div>
+                      {blob.level < 20 ? (
+                        <div className="w-full mt-0.5 h-[3px] rounded-full bg-slate-700/60 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(100, Math.round((blob.xp / XP4LV(blob.level)) * 100))}%`,
+                              background: getEvolutionStage(blob.level) >= 2
+                                ? 'linear-gradient(90deg,#f59e0b,#fbbf24)'
+                                : getEvolutionStage(blob.level) === 1
+                                ? 'linear-gradient(90deg,#8b5cf6,#a78bfa)'
+                                : 'linear-gradient(90deg,#0ea5e9,#38bdf8)',
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-amber-400 text-[7px] font-black tracking-wide">MAX</div>
+                      )}
                     </div>
                   );
                 })}
@@ -2445,6 +2506,31 @@ export default function App() {
 
           </div>
         )}
+        {currentScreen === 'reactor' && (
+          <ReactorModal
+            phase={reactor.reactor?.phase ?? null}
+            eventId={reactor.reactor?.eventId ?? null}
+            target={reactor.reactor?.target ?? 0}
+            totalContributed={reactor.reactor?.totalContributed ?? 0}
+            totalReward={reactor.reactor?.totalReward ?? 0}
+            contributorsCount={reactor.reactor?.contributorsCount ?? 0}
+            progressPercent={reactor.progressPercent}
+            synthesizingProgress={reactor.synthesizingProgress}
+            msUntilClaimEnd={reactor.msUntilClaimEnd}
+            myContribution={reactor.myContrib?.contributed ?? 0}
+            estimatedReward={reactor.estimatedReward}
+            myAllocation={reactor.myContrib?.allocation ?? 0}
+            myClaimed={reactor.myContrib?.claimed ?? false}
+            cubes={state.cubes}
+            isClaiming={reactor.isClaiming}
+            claimError={reactor.claimError}
+            claimTxHash={reactor.claimTxHash}
+            walletAddress={rawWalletAddress}
+            firestoreError={reactor.firestoreError}
+            onContribute={reactor.contribute}
+            onClaim={reactor.claimTokens}
+          />
+        )}
       </main>
 
       {/* ── BOTTOM NAV BAR ── */}
@@ -2456,18 +2542,15 @@ export default function App() {
           { id: 'shop', label: 'Shop', icon: Database },
           { id: 'reactor', label: 'Reactor', icon: Atom }
         ].map((item) => {
-          const isActive = currentScreen === item.id || (item.id === 'reactor' && showReactorModal);
+          const isActive = currentScreen === item.id;
           const Icon = item.icon;
           return (
             <button
               key={item.id}
               onClick={() => {
-                if (item.id === 'reactor') {
-                  setShowReactorModal(true);
-                  return;
-                }
                 setCurrentScreen(item.id as any);
                 if (item.id === 'expeditions') {
+                  setExploreTab('expeditions');
                   updateState((prev) => {
                     if (prev.selectedId) {
                       prev.expPickId = prev.selectedId;
@@ -2678,33 +2761,6 @@ export default function App() {
           nodesHeld={networkMap.myNodes?.length ?? 0}
           incomePerHour={networkMap.totalIncome ?? 0}
           onClose={() => setShowProfileModal(false)}
-        />
-      )}
-
-      {showReactorModal && (
-        <ReactorModal
-          phase={reactor.reactor?.phase ?? null}
-          eventId={reactor.reactor?.eventId ?? null}
-          target={reactor.reactor?.target ?? 0}
-          totalContributed={reactor.reactor?.totalContributed ?? 0}
-          totalReward={reactor.reactor?.totalReward ?? 0}
-          contributorsCount={reactor.reactor?.contributorsCount ?? 0}
-          progressPercent={reactor.progressPercent}
-          synthesizingProgress={reactor.synthesizingProgress}
-          msUntilClaimEnd={reactor.msUntilClaimEnd}
-          myContribution={reactor.myContrib?.contributed ?? 0}
-          estimatedReward={reactor.estimatedReward}
-          myAllocation={reactor.myContrib?.allocation ?? 0}
-          myClaimed={reactor.myContrib?.claimed ?? false}
-          cubes={state.cubes}
-          isClaiming={reactor.isClaiming}
-          claimError={reactor.claimError}
-          claimTxHash={reactor.claimTxHash}
-          walletAddress={rawWalletAddress}
-          firestoreError={reactor.firestoreError}
-          onContribute={reactor.contribute}
-          onClaim={reactor.claimTokens}
-          onClose={() => setShowReactorModal(false)}
         />
       )}
 

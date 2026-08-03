@@ -4,9 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
-  X, Atom, Users, Coins, TrendingUp, Clock, Gift,
+  Atom, Users, Coins, TrendingUp, Clock, Gift,
   CheckCircle2, AlertTriangle, ExternalLink, Loader2, Wallet, Sparkles,
 } from 'lucide-react';
 import type { ReactorPhase } from '../hooks/useReactor';
@@ -36,7 +35,6 @@ interface ReactorModalProps {
   firestoreError?: string | null;
   onContribute: (amount: number) => Promise<boolean>;
   onClaim: () => Promise<boolean>;
-  onClose: () => void;
 }
 
 function fmtCountdown(ms: number): string {
@@ -91,7 +89,7 @@ export function ReactorModal({
   progressPercent, synthesizingProgress, msUntilClaimEnd,
   myContribution, estimatedReward, myAllocation, myClaimed,
   cubes, isClaiming, claimError, claimTxHash,
-  walletAddress, firestoreError, onContribute, onClaim, onClose,
+  walletAddress, firestoreError, onContribute, onClaim,
 }: ReactorModalProps) {
   const [customAmount, setCustomAmount] = useState('');
   const [contributing, setContributing] = useState(false);
@@ -200,25 +198,8 @@ export function ReactorModal({
     : 0;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center sm:justify-center"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-      >
-        <motion.div
-          initial={{ y: 60, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 60, opacity: 0 }}
-          transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-          className="w-full sm:max-w-md bg-[#06091e] border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl max-h-[94vh] overflow-y-auto shadow-2xl"
-          style={{ boxShadow: `0 0 60px ${theme.color}22` }}
-        >
-          <div className="p-5 pb-7">
-
-            {/* Handle for mobile */}
-            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4 sm:hidden" />
+    <div className="flex flex-col flex-1 animate-fade-in">
+          <div className="p-4 pb-6">
 
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
@@ -242,12 +223,6 @@ export function ReactorModal({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="text-slate-500 hover:text-white text-xl p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </div>
 
             {/* Фаза + счётчики */}
@@ -606,8 +581,6 @@ export function ReactorModal({
             </div>
 
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    </div>
   );
 }

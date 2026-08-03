@@ -432,10 +432,26 @@ export function useNetworkMap({
       : (NODE_CONFIG.cubesPerHour[node.tier] || 10);
     const hours = Math.max(0, (Date.now() - node.lastCollected) / 3600000);
     if (isNaN(hours)) return 0;
-    return Math.min(
+
+    const base = Math.min(
       Math.floor(hours * rate),
       rate * NODE_CONFIG.maxAccumulationHours,
     );
+    if (base <= 0) return 0;
+
+    // Бонус за удержание. Повторяет расчёт сервера (api/claim.ts): тот
+    // пересчитывает fortifyBonus из capturedAt на момент сбора и умножает
+    // на него награду. Без этого UI показывал базу без бонуса, а на баланс
+    // приходило больше — отсюда расхождение при «Collect all».
+    const holdHours = node.capturedAt
+      ? Math.max(0, (Date.now() - node.capturedAt) / 3600000)
+      : 0;
+    const fortifyBonus = Math.min(
+      NODE_CONFIG.maxFortifyBonus,
+      Math.floor(holdHours / 24) * NODE_CONFIG.fortifyBonusPerDay,
+    );
+
+    return Math.round(base * (1 + fortifyBonus / 100));
   }, [getActiveOwnerId]);
 
   // ── Total pending across all nodes ──────────────────────
