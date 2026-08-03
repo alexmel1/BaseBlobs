@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"index.html: HTTP %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"ReactorCoreCanvas.tsx: HTTP %{http_code}\\\\n\" http://localhost:3000/src/components/ReactorCoreCanvas.tsx)",
+      "Bash(curl -s -o /dev/null -w \"ReactorModal.tsx: HTTP %{http_code}\\\\n\" http://localhost:3000/src/components/ReactorModal.tsx)",
+      "Bash(curl -s -o /dev/null -w \"App.tsx: HTTP %{http_code}\\\\n\" http://localhost:3000/src/App.tsx)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $NF}')",
+      "Bash(node -p \"require\\('./node_modules/dotenv/package.json'\\).version\")",
+      "Bash(echo \"да, dotenv@$\\(node -p \"require\\('./node_modules/dotenv/package.json'\\).version\"\\)\")",
+      "Bash(curl -s \"http://localhost:3000/src/main.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://localhost:3000/src/components/ReactorPreview.tsx\")",
+      "Bash(curl -s \"http://localhost:3000/src/components/ReactorPreview.tsx\")"
     ]
   }
 }

@@ -478,8 +478,18 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [saveTrigger, syncId, hasLoadedCloud]);
 
+  // Toast trigger.
+  // Объявлен выше checkServerStatus намеренно: тот держит triggerToast
+  // в зависимостях useCallback, а массив зависимостей вычисляется при рендере —
+  // при обратном порядке это ReferenceError (TDZ).
+  const triggerToast = React.useCallback((msg: string) => {
+    setToastMessage(msg);
+  }, []);
+
   // 🔄 Automatic status & state check callback
   const inFlightStatusCheckRef = React.useRef(false);
+  // Тост про истёкшую сессию показываем один раз, а не на каждый focus
+  const sessionExpiredNoticeRef = React.useRef(false);
 
   const checkServerStatus = React.useCallback(async () => {
     if (!syncId || !rawWalletAddress) return;
@@ -487,12 +497,26 @@ export default function App() {
     inFlightStatusCheckRef.current = true;
 
     try {
+      // interactive: false — фоновая проверка НИКОГДА не открывает кошелёк.
+      // Незапрошенное окно подписи = флаг Safe Browsing / Blockaid (AGENTS.md, п.5).
       const res = await fetchWithSession('/api/status', {
         syncId,
         walletAddress: rawWalletAddress,
-      });
+      }, { interactive: false });
 
-      if (res && res.ok) {
+      if (!res) {
+        // Живой сессии нет. Ждём клика игрока — он переавторизует.
+        if (!sessionExpiredNoticeRef.current) {
+          sessionExpiredNoticeRef.current = true;
+          triggerToast('🔑 Session expired — any action will re-authorize.');
+        }
+        return;
+      }
+
+      if (res.ok) {
+        // Сессия снова жива — разрешаем показать уведомление в следующий раз
+        sessionExpiredNoticeRef.current = false;
+
         const data = await res.json();
         const serverState = data.state || data;
         if (serverState && typeof serverState === 'object' && serverState.initialized) {
@@ -510,7 +534,7 @@ export default function App() {
     } finally {
       inFlightStatusCheckRef.current = false;
     }
-  }, [syncId, rawWalletAddress]);
+  }, [syncId, rawWalletAddress, triggerToast]);
 
   // 🔄 Check server status on initial wallet connect / mount
   useEffect(() => {
@@ -559,11 +583,6 @@ export default function App() {
       window.removeEventListener('beforeunload', handleVisibilityOrFocus);
     };
   }, [syncId, rawWalletAddress, hasLoadedCloud, checkServerStatus]);
-
-  // Toast trigger
-  const triggerToast = React.useCallback((msg: string) => {
-    setToastMessage(msg);
-  }, []);
 
   // Track in-flight server expedition claims to avoid duplicate fetches
   const inFlightExpeditionClaimsRef = React.useRef<Set<string>>(new Set());
@@ -832,6 +851,8 @@ export default function App() {
     setSyncId(null);
     setHasLoadedCloud(false);
     setIsCloudSyncing(false);
+    // Переподключённый кошелёк должен снова уметь сообщить об истёкшей сессии
+    sessionExpiredNoticeRef.current = false;
 
     if (rawWalletAddress) {
       clearSessionToken(rawWalletAddress);
@@ -2663,6 +2684,7 @@ export default function App() {
       {showReactorModal && (
         <ReactorModal
           phase={reactor.reactor?.phase ?? null}
+          eventId={reactor.reactor?.eventId ?? null}
           target={reactor.reactor?.target ?? 0}
           totalContributed={reactor.reactor?.totalContributed ?? 0}
           totalReward={reactor.reactor?.totalReward ?? 0}

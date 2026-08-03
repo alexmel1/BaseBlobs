@@ -14,6 +14,9 @@ export default defineConfig(() => {
     build: {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
+        // Явно только index.html: preview.html — dev-стенд визуала реактора,
+        // он не должен собираться и деплоиться на Vercel.
+        input: path.resolve(__dirname, 'index.html'),
         output: {
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
