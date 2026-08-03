@@ -1,16 +1,20 @@
 import React from 'react';
-import { Blob, BlobUpgrades, EvolutionStage } from '../types';
-import { UPGRADES, EVOLUTION_NAMES, EVOLUTION_EMOJIS, canUpgrade, getEvolutionStage, getUpgradeSlots } from '../data';
+import { Blob, UpgradeBranchId } from '../types';
+import { UPGRADES, EVOLUTION_NAMES, EVOLUTION_EMOJIS, canUpgrade, getEvolutionStage, getUpgradeSlots, getBlobBranches } from '../data';
 
 interface Props {
   selectedBlob: Blob;
   cubes: number;
-  onUpgrade: (blobId: string, branch: 'speed' | 'harvest' | 'fortune') => void;
+  onUpgrade: (blobId: string, branch: UpgradeBranchId) => void;
 }
 
 export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade }) => {
   const stage = getEvolutionStage(selectedBlob.level);
   const slots = getUpgradeSlots(selectedBlob.level);
+
+  // У каждого блоба свой набор из 3 веток — показываем только их
+  const branchIds = getBlobBranches(selectedBlob);
+  const branches = UPGRADES.filter((u) => branchIds.includes(u.id));
 
   return (
     <div style={{ padding: '0 14px 24px' }}>
@@ -50,14 +54,26 @@ export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade
         </div>
       </div>
 
-      {/* Upgrade branches */}
-      {UPGRADES.map(branch => {
+      {/* Explains that branches differ per Blob */}
+      <p style={{
+        color: 'rgba(180,200,255,0.45)',
+        fontSize: 10,
+        lineHeight: 1.5,
+        marginBottom: 12,
+        paddingLeft: 2,
+      }}>
+        🎲 Every Blob is born with its own set of {branches.length} branches out of {UPGRADES.length}.
+        Summon more Blobs to find different builds.
+      </p>
+
+      {/* Upgrade branches — only the ones this Blob rolled */}
+      {branches.map(branch => {
         const currentLv = selectedBlob.upgrades[branch.id] || 0;
         const isMaxed = currentLv >= 5;
         const check = !isMaxed ? canUpgrade(
           branch.id, currentLv, selectedBlob.level,
-          selectedBlob.upgrades, cubes, stage
-        ) : { allowed: false };
+          selectedBlob.upgrades, cubes, stage, branchIds
+        ) : { allowed: false, reason: undefined as string | undefined };
         const nextLevel = !isMaxed ? branch.levels[currentLv] : null;
 
         return (
@@ -72,7 +88,23 @@ export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <span style={{ fontSize: 22 }}>{branch.icon}</span>
               <div style={{ flex: 1 }}>
-                <p style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{branch.name}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <p style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{branch.name}</p>
+                  {/* Farm / Combat tag — tells the player what this branch is for */}
+                  <span style={{
+                    fontSize: 8,
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    padding: '2px 6px',
+                    borderRadius: 99,
+                    color: branch.kind === 'combat' ? '#ff9a6b' : '#6ee7b7',
+                    background: branch.kind === 'combat' ? 'rgba(255,122,47,0.12)' : 'rgba(27,175,122,0.12)',
+                    border: `1px solid ${branch.kind === 'combat' ? 'rgba(255,122,47,0.35)' : 'rgba(27,175,122,0.35)'}`,
+                  }}>
+                    {branch.kind === 'combat' ? 'Combat' : 'Farm'}
+                  </span>
+                </div>
                 <p style={{ color: 'rgba(180,200,255,0.5)', fontSize: 10 }}>{branch.desc}</p>
               </div>
               <div style={{

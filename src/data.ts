@@ -6,7 +6,7 @@
 import {
   Personality, Zone, Quest, PersonalityType, BlobUpgrades, EvolutionStage,
   TraitId, Trait, ExpeditionEventType, ExpeditionEvent, BlobMood,
-  NetworkNode, NodeTier, NodeType, Blob,
+  NetworkNode, NodeTier, NodeType, Blob, UpgradeBranchId,
 } from './types.js';
 
 export const P: Record<PersonalityType, Personality> = {
@@ -214,11 +214,13 @@ export function getBlobStats(personality: PersonalityType, level: number): BlobS
 }
 
 export interface UpgradeBranch {
-  id: 'speed' | 'harvest' | 'fortune';
+  id: UpgradeBranchId;
   icon: string;
   name: string;
   desc: string;
   color: string;
+  /** farm — влияет на экспедиции, combat — на Power (ноды, арена) */
+  kind: 'farm' | 'combat';
   // For each level (index 0 = level 1):
   levels: {
     cost: number;       // cost in cubes
@@ -235,6 +237,7 @@ export const UPGRADES: UpgradeBranch[] = [
     name: 'Speed',
     desc: 'Reduces expedition time',
     color: '#2a78d6',
+    kind: 'farm',
     levels: [
       { cost: 50,   unlockLv: 1,  effect: '-8% time',  value: 0.92 },
       { cost: 120,  unlockLv: 4,  effect: '-15% time', value: 0.85 },
@@ -249,6 +252,7 @@ export const UPGRADES: UpgradeBranch[] = [
     name: 'Harvest',
     desc: 'More cubes per expedition',
     color: '#1baf7a',
+    kind: 'farm',
     levels: [
       { cost: 50,   unlockLv: 1,  effect: '+10% cubes', value: 1.10 },
       { cost: 120,  unlockLv: 4,  effect: '+22% cubes', value: 1.22 },
@@ -263,6 +267,7 @@ export const UPGRADES: UpgradeBranch[] = [
     name: 'Fortune',
     desc: 'Bonus event chance',
     color: '#eda100',
+    kind: 'farm',
     levels: [
       { cost: 50,   unlockLv: 1,  effect: '+3% bonus chance',  value: 0.03 },
       { cost: 120,  unlockLv: 4,  effect: '+8% bonus chance',  value: 0.08 },
@@ -271,7 +276,112 @@ export const UPGRADES: UpgradeBranch[] = [
       { cost: 1200, unlockLv: 15, effect: '+30% bonus chance', value: 0.30 },
     ],
   },
+  {
+    id: 'insight',
+    icon: '📚',
+    name: 'Insight',
+    desc: 'More XP per expedition',
+    color: '#7c5cff',
+    kind: 'farm',
+    levels: [
+      { cost: 50,   unlockLv: 1,  effect: '+10% XP', value: 1.10 },
+      { cost: 120,  unlockLv: 4,  effect: '+20% XP', value: 1.20 },
+      { cost: 280,  unlockLv: 7,  effect: '+32% XP', value: 1.32 },
+      { cost: 600,  unlockLv: 11, effect: '+48% XP', value: 1.48 },
+      { cost: 1200, unlockLv: 15, effect: '+65% XP', value: 1.65 },
+    ],
+  },
+  {
+    id: 'vigor',
+    icon: '💢',
+    name: 'Vigor',
+    desc: 'Raw Power for nodes & arena',
+    color: '#e0457b',
+    kind: 'combat',
+    levels: [
+      { cost: 50,   unlockLv: 1,  effect: '+8% Power',  value: 1.08 },
+      { cost: 120,  unlockLv: 4,  effect: '+16% Power', value: 1.16 },
+      { cost: 280,  unlockLv: 7,  effect: '+26% Power', value: 1.26 },
+      { cost: 600,  unlockLv: 11, effect: '+38% Power', value: 1.38 },
+      { cost: 1200, unlockLv: 15, effect: '+52% Power', value: 1.52 },
+    ],
+  },
+  {
+    id: 'guard',
+    icon: '🛡️',
+    name: 'Guard',
+    desc: 'Defends nodes you hold',
+    color: '#3d9bd6',
+    kind: 'combat',
+    levels: [
+      { cost: 50,   unlockLv: 1,  effect: '+10% defense', value: 1.10 },
+      { cost: 120,  unlockLv: 4,  effect: '+20% defense', value: 1.20 },
+      { cost: 280,  unlockLv: 7,  effect: '+34% defense', value: 1.34 },
+      { cost: 600,  unlockLv: 11, effect: '+50% defense', value: 1.50 },
+      { cost: 1200, unlockLv: 15, effect: '+70% defense', value: 1.70 },
+    ],
+  },
+  {
+    id: 'ferocity',
+    icon: '🔥',
+    name: 'Ferocity',
+    desc: 'Stronger when attacking',
+    color: '#ff7a2f',
+    kind: 'combat',
+    levels: [
+      { cost: 50,   unlockLv: 1,  effect: '+10% attack', value: 1.10 },
+      { cost: 120,  unlockLv: 4,  effect: '+20% attack', value: 1.20 },
+      { cost: 280,  unlockLv: 7,  effect: '+34% attack', value: 1.34 },
+      { cost: 600,  unlockLv: 11, effect: '+50% attack', value: 1.50 },
+      { cost: 1200, unlockLv: 15, effect: '+70% attack', value: 1.70 },
+    ],
+  },
 ];
+
+/**
+ * Ветки старых блобов, у которых поле branches ещё не заполнено.
+ * Сохраняет уже вложенные кубы: у них остаётся классическая тройка.
+ */
+export const DEFAULT_BRANCHES: UpgradeBranchId[] = ['speed', 'harvest', 'fortune'];
+
+/** Сколько веток выпадает новому блобу */
+export const BRANCHES_PER_BLOB = 3;
+
+/** Ветки блоба с обратной совместимостью: нет поля — классическая тройка. */
+export function getBlobBranches(blob: { branches?: UpgradeBranchId[] } | null | undefined): UpgradeBranchId[] {
+  const list = blob?.branches;
+  if (!Array.isArray(list) || list.length === 0) return DEFAULT_BRANCHES;
+  // Отфильтровываем мусор, чтобы битое сохранение не роняло экран апгрейдов
+  const valid = list.filter((id) => UPGRADES.some((u) => u.id === id));
+  return valid.length > 0 ? valid : DEFAULT_BRANCHES;
+}
+
+/**
+ * Ролл набора веток для нового блоба: гарантированно хотя бы одна
+ * фармовая и одна боевая, чтобы блоб не оказался бесполезен в одном
+ * из режимов. Остальные добираются случайно из общего пула.
+ */
+export function rollBlobBranches(): UpgradeBranchId[] {
+  const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+  const farm = UPGRADES.filter((u) => u.kind === 'farm').map((u) => u.id);
+  const combat = UPGRADES.filter((u) => u.kind === 'combat').map((u) => u.id);
+
+  const chosen: UpgradeBranchId[] = [pick(farm), pick(combat)];
+
+  const rest = UPGRADES
+    .map((u) => u.id)
+    .filter((id) => !chosen.includes(id));
+
+  while (chosen.length < BRANCHES_PER_BLOB && rest.length > 0) {
+    const idx = Math.floor(Math.random() * rest.length);
+    chosen.push(rest[idx]);
+    rest.splice(idx, 1);
+  }
+
+  // Держим порядок как в UPGRADES, чтобы UI не прыгал между рендерами
+  return UPGRADES.map((u) => u.id).filter((id) => chosen.includes(id));
+}
 
 // Returns evolution stage by level
 export function getEvolutionStage(level: number): EvolutionStage {
@@ -291,17 +401,27 @@ export function getUpgradeSlots(level: number): number {
 
 // Check if upgrade can be purchased
 export function canUpgrade(
-  branchId: 'speed' | 'harvest' | 'fortune',
+  branchId: UpgradeBranchId,
   currentLevel: number, // current upgrade level (0 = not purchased)
   blobLevel: number,
   blobUpgrades: BlobUpgrades,
   cubes: number,
-  evolutionStage: EvolutionStage
+  evolutionStage: EvolutionStage,
+  // Ветки конкретного блоба. По умолчанию классическая тройка —
+  // это же значение получают старые блобы без поля branches.
+  availableBranches: UpgradeBranchId[] = DEFAULT_BRANCHES
 ): { allowed: boolean; reason?: string } {
+  // Блобу выпал свой набор веток: качать чужую нельзя.
+  // Эта же проверка дублируется на сервере — она защитная, не косметическая.
+  if (!availableBranches.includes(branchId))
+    return { allowed: false, reason: 'This Blob has no such branch' };
+
   if (currentLevel >= 5) return { allowed: false, reason: 'Max level' };
 
-  const branch = UPGRADES.find(u => u.id === branchId)!;
+  const branch = UPGRADES.find(u => u.id === branchId);
+  if (!branch) return { allowed: false, reason: 'Unknown branch' };
   const nextLevel = branch.levels[currentLevel]; // next level to purchase
+  if (!nextLevel) return { allowed: false, reason: 'Max level' };
 
   if (blobLevel < nextLevel.unlockLv)
     return { allowed: false, reason: `Need Blob Lv.${nextLevel.unlockLv}` };
@@ -311,14 +431,32 @@ export function canUpgrade(
 
   // Slots check — on Stage 0 no more than 1 branch can be upgraded
   const slots = getUpgradeSlots(blobLevel);
-  const activeBranches = (['speed', 'harvest', 'fortune'] as const)
-    .filter(b => b !== branchId && blobUpgrades[b] > 0).length;
+  const activeBranches = availableBranches
+    .filter(b => b !== branchId && (blobUpgrades[b] ?? 0) > 0).length;
 
   // If this branch is not yet started and active branches already equal slots
-  if (blobUpgrades[branchId] === 0 && activeBranches >= slots)
+  if ((blobUpgrades[branchId] ?? 0) === 0 && activeBranches >= slots)
     return { allowed: false, reason: `Evolve to unlock more branches` };
 
   return { allowed: true };
+}
+
+/**
+ * Значение эффекта ветки на её текущем уровне.
+ * Ищет ветку по id, а не по индексу в UPGRADES — иначе добавление
+ * новых веток молча ломало бы расчёт старых.
+ */
+export function getUpgradeValue(
+  id: UpgradeBranchId,
+  level: number | undefined,
+  fallback: number
+): number {
+  const lvl = level ?? 0;
+  if (lvl <= 0) return fallback;
+  const branch = UPGRADES.find(u => u.id === id);
+  if (!branch) return fallback;
+  const entry = branch.levels[Math.min(lvl, branch.levels.length) - 1];
+  return entry ? entry.value : fallback;
 }
 
 // Apply upgrades to the expedition result
@@ -327,18 +465,16 @@ export function applyUpgrades(
   baseDuration: number,
   baseBonusChance: number,
   upgrades: BlobUpgrades
-): { reward: number; duration: number; bonusChance: number } {
-  const harvestMult = upgrades.harvest > 0
-    ? UPGRADES[1].levels[upgrades.harvest - 1].value : 1;
-  const speedMult = upgrades.speed > 0
-    ? UPGRADES[0].levels[upgrades.speed - 1].value : 1;
-  const fortuneBonus = upgrades.fortune > 0
-    ? UPGRADES[2].levels[upgrades.fortune - 1].value : 0;
+): { reward: number; duration: number; bonusChance: number; xpMult: number } {
+  const harvestMult = getUpgradeValue('harvest', upgrades.harvest, 1);
+  const speedMult = getUpgradeValue('speed', upgrades.speed, 1);
+  const insightMult = getUpgradeValue('insight', upgrades.insight, 1);
 
   return {
     reward: Math.round(baseReward * harvestMult),
     duration: Math.round(baseDuration * speedMult),
     bonusChance: Math.min(0.95, baseBonusChance),
+    xpMult: insightMult,
   };
 }
 
@@ -432,10 +568,12 @@ export const EXPEDITION_EVENTS: Record<ExpeditionEventType, ExpeditionEvent> = {
   data_storm: {
     type: 'data_storm',
     title: 'Data Storm',
-    description: 'A glitch storm scattered some cubes.',
+    description: 'A glitch storm scattered some cubes — but your blob learned from the chaos.',
     icon: '🌩️',
-    cubeMultiplier: 0.7,
-    xpMultiplier: 1.0,
+    // Смягчено: было 0.7 кубов без компенсации, что ощущалось как чистое
+    // наказание. Теперь это обмен — меньше кубов, зато больше опыта.
+    cubeMultiplier: 0.85,
+    xpMultiplier: 1.3,
     bonusItem: null,
   },
   blob_charm: {
@@ -471,10 +609,10 @@ export const EXPEDITION_EVENTS: Record<ExpeditionEventType, ExpeditionEvent> = {
 export const EVENT_WEIGHTS: Record<ExpeditionEventType, number> = {
   normal:     40,
   rich_vein:  25,
-  data_storm: 15,
-  blob_charm: 10,
-  awakening:   7,
-  jackpot:     3,
+  data_storm: 12,
+  blob_charm: 11,
+  awakening:   8,
+  jackpot:     4,
 };
 
 // ─── NETWORK MAP CONFIG ───────────────────────────────────
@@ -580,22 +718,44 @@ export function calcBlobPower(blob: Blob): number {
     blob.level * 10 +
     (blob.upgrades?.speed   ?? 0) * 8 +
     (blob.upgrades?.harvest ?? 0) * 5 +
-    (blob.upgrades?.fortune ?? 0) * 6;
+    (blob.upgrades?.fortune ?? 0) * 6 +
+    (blob.upgrades?.insight ?? 0) * 5;
+
+  // Vigor — единственная ветка, дающая Power множителем: это делает
+  // «боевого» блоба заметно сильнее в захвате нод и будущей арене.
+  const vigorMult = getUpgradeValue('vigor', blob.upgrades?.vigor, 1);
 
   // Trait bonus
   let traitMult = 1;
   if (blob.trait === 'ancient') traitMult = 1.05;
   if (blob.trait === 'berserker') traitMult = 1.08;
 
-  return Math.round(basePower * moodMult * traitMult);
+  return Math.round(basePower * moodMult * traitMult * vigorMult);
 }
 
+/** Сила блоба в роли атакующего (Power × Ferocity). */
+export function calcAttackPower(blob: Blob): number {
+  return Math.round(calcBlobPower(blob) * getUpgradeValue('ferocity', blob.upgrades?.ferocity, 1));
+}
+
+/** Сила блоба в роли защитника ноды (Power × Guard). */
+export function calcDefensePower(blob: Blob): number {
+  return Math.round(calcBlobPower(blob) * getUpgradeValue('guard', blob.upgrades?.guard, 1));
+}
+
+/**
+ * Клиентский прогноз исхода атаки. Должен считать защиту так же, как
+ * сервер в api/claim.ts (fortifyBonus × guardMult), иначе UI будет
+ * обещать победу там, где сервер её не даст.
+ * Авторитет всё равно за сервером — это только подсказка в интерфейсе.
+ */
 export function canAttackNode(
   blobPower: number,
   node: NetworkNode,
 ): boolean {
   if (!node.owner && !node.isNPC) return true; // empty node
   const defenderPower = node.isNPC ? node.npcPower : node.blobPower;
-  const effectiveDefense = defenderPower * (1 + (node.fortifyBonus || 0) / 100);
+  const effectiveDefense =
+    defenderPower * (1 + (node.fortifyBonus || 0) / 100) * (node.guardMult || 1);
   return blobPower > effectiveDefense * 0.8;
 }

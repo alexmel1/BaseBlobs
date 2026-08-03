@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { NetworkNode, NodeTier } from '../types';
-import { NODE_CONFIG, calcBlobPower } from '../data';
+import { NODE_CONFIG, calcAttackPower } from '../data';
 
 // ─── MOCK NODES for display without Firebase ──────────────
 // In Task 3, this data will be replaced by real data from Firebase
@@ -538,15 +538,17 @@ export function NetworkMap({
   };
 
   const handleAttack = (node: NetworkNode) => {
-    // Auto pre-select strongest eligible blob
+    // Auto pre-select strongest eligible blob.
+    // Сортируем по атакующей силе (Power × Ferocity) — именно её
+    // сервер сравнивает с защитой ноды.
     const minLv = NODE_CONFIG.minBlobLevel[node.tier] ?? 1;
     const eligibleBlobs = blobs.filter(b => b.level >= minLv);
 
     if (eligibleBlobs.length > 0) {
-      const sorted = [...eligibleBlobs].sort((a, b) => calcBlobPower(b) - calcBlobPower(a));
+      const sorted = [...eligibleBlobs].sort((a, b) => calcAttackPower(b) - calcAttackPower(a));
       setSelectedAttackBlobId(sorted[0].id);
     } else if (blobs.length > 0) {
-      const sortedAll = [...blobs].sort((a, b) => calcBlobPower(b) - calcBlobPower(a));
+      const sortedAll = [...blobs].sort((a, b) => calcAttackPower(b) - calcAttackPower(a));
       setSelectedAttackBlobId(sortedAll[0].id);
     } else {
       setSelectedAttackBlobId(null);
@@ -818,7 +820,7 @@ export function NetworkMap({
             onSelect={setSelectedAttackBlobId}
             onConfirm={confirmAttack}
             onCancel={() => { setPendingAttackNode(null); setSelectedAttackBlobId(null); }}
-            calcPower={calcBlobPower}
+            calcPower={calcAttackPower}
             attackCooldowns={attackCooldowns}
           />
         </>

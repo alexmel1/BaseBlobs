@@ -29,8 +29,8 @@ import {
   Radio,
 } from 'lucide-react';
 
-import { GameState, Blob, ActiveExpedition, PersonalityType, ExpeditionEventType, TraitId } from './types';
-import { P, PKEYS, ZONES, XP4LV, EREGEN, getBlobStats, getEvolutionStage, EVOLUTION_EMOJIS, EVOLUTION_NAMES, UPGRADES, canUpgrade, getUpgradeSlots, applyUpgrades, DEFAULT_NEW_BLOB_FIELDS, DEFAULT_GAMESTATE_NEW_FIELDS, DEFAULT_BLOB_MOOD, EXPEDITION_EVENTS, EVENT_WEIGHTS } from './data';
+import { GameState, Blob, ActiveExpedition, PersonalityType, ExpeditionEventType, TraitId, UpgradeBranchId } from './types';
+import { P, PKEYS, ZONES, XP4LV, EREGEN, getBlobStats, getEvolutionStage, EVOLUTION_EMOJIS, EVOLUTION_NAMES, UPGRADES, canUpgrade, getUpgradeSlots, applyUpgrades, getBlobBranches, DEFAULT_BRANCHES, DEFAULT_NEW_BLOB_FIELDS, DEFAULT_GAMESTATE_NEW_FIELDS, DEFAULT_BLOB_MOOD, EXPEDITION_EVENTS, EVENT_WEIGHTS } from './data';
 import { BackgroundCanvas } from './components/BackgroundCanvas';
 import { BlobCanvas } from './components/BlobCanvas';
 import { PlatformCanvas } from './components/PlatformCanvas';
@@ -71,7 +71,7 @@ export function getDefaultState(): GameState {
     questDone: { exp: false, cubes: false, sends: false, taps: false },
     questClaimed: { exp: false, cubes: false, sends: false, taps: false },
     questsReset: Date.now(),
-    blobs: [{ id: 'b1', personality: 'happy', level: 1, xp: 0, upgrades: { speed: 0, harvest: 0, fortune: 0 }, ...DEFAULT_NEW_BLOB_FIELDS }],
+    blobs: [{ id: 'b1', personality: 'happy', level: 1, xp: 0, upgrades: {}, branches: DEFAULT_BRANCHES, ...DEFAULT_NEW_BLOB_FIELDS }],
     selectedId: 'b1',
     expPickId: 'b1',
     expPickIds: ['b1'],
@@ -96,25 +96,34 @@ export function validateAndMigrateState(parsed: any): GameState {
     ? parsed.blobs
     : defaultState.blobs;
 
-  const migratedBlobs = rawBlobs.map((b: any, index: number) => ({
-    id: b?.id || `b${index + 1}`,
-    name: b?.name || `Blob #${index + 1}`,
-    personality: b?.personality || 'happy',
-    level: typeof b?.level === 'number' ? b.level : 1,
-    xp: typeof b?.xp === 'number' ? b.xp : (typeof b?.experience === 'number' ? b.experience : 0),
-    happiness: typeof b?.happiness === 'number' ? b.happiness : 80,
-    upgrades: {
-      speed: b?.upgrades?.speed || 0,
-      harvest: b?.upgrades?.harvest || 0,
-      fortune: b?.upgrades?.fortune || 0,
-    },
-    mood: b?.mood || DEFAULT_BLOB_MOOD,
-    trait: b?.trait ?? null,
-    isRadiant: Boolean(b?.isRadiant),
-    totalExpeditions: b?.totalExpeditions || 0,
-    totalCubesEarned: b?.totalCubesEarned || 0,
-    nodesHeld: Array.isArray(b?.nodesHeld) ? b.nodesHeld : [],
-  }));
+  const migratedBlobs = rawBlobs.map((b: any, index: number) => {
+    // Ветки блоба: сохраняем то, что пришло с сервера. Старые блобы без
+    // поля получают классическую тройку через getBlobBranches.
+    const branches = getBlobBranches(b);
+
+    // Уровни качаются только по доступным веткам — чужие в стейт не попадают
+    const upgrades: Record<string, number> = {};
+    for (const id of branches) {
+      upgrades[id] = Number(b?.upgrades?.[id]) || 0;
+    }
+
+    return {
+      id: b?.id || `b${index + 1}`,
+      name: b?.name || `Blob #${index + 1}`,
+      personality: b?.personality || 'happy',
+      level: typeof b?.level === 'number' ? b.level : 1,
+      xp: typeof b?.xp === 'number' ? b.xp : (typeof b?.experience === 'number' ? b.experience : 0),
+      happiness: typeof b?.happiness === 'number' ? b.happiness : 80,
+      upgrades,
+      branches,
+      mood: b?.mood || DEFAULT_BLOB_MOOD,
+      trait: b?.trait ?? null,
+      isRadiant: Boolean(b?.isRadiant),
+      totalExpeditions: b?.totalExpeditions || 0,
+      totalCubesEarned: b?.totalCubesEarned || 0,
+      nodesHeld: Array.isArray(b?.nodesHeld) ? b.nodesHeld : [],
+    };
+  });
 
   const selectedId = migratedBlobs.some((b: any) => b.id === parsed.selectedId)
     ? parsed.selectedId
@@ -972,7 +981,7 @@ export default function App() {
   };
 
   // Action: Upgrade a specific branch on a blob
-  const handleUpgradeBlob = async (blobId: string, branch: 'speed' | 'harvest' | 'fortune') => {
+  const handleUpgradeBlob = async (blobId: string, branch: UpgradeBranchId) => {
     if (!rawWalletAddress || !syncId) {
       triggerToast('Connect wallet to upgrade blob!');
       return;

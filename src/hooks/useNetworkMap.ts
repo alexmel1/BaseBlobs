@@ -231,6 +231,10 @@ export function useNetworkMap({
             capturedAt: typeof raw.capturedAt === 'number' && !isNaN(raw.capturedAt) ? raw.capturedAt : null,
             lastCollected: typeof raw.lastCollected === 'number' && !isNaN(raw.lastCollected) ? raw.lastCollected : null,
             fortifyBonus: typeof raw.fortifyBonus === 'number' && !isNaN(raw.fortifyBonus) ? raw.fortifyBonus : 0,
+            // Множитель ветки Guard защитника. Старые ноды поля не имеют — там 1.
+            guardMult: typeof raw.guardMult === 'number' && !isNaN(raw.guardMult) && raw.guardMult > 0
+              ? raw.guardMult
+              : 1,
           });
         });
       }

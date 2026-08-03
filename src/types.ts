@@ -41,11 +41,25 @@ export interface Quest {
   xp: number;
 }
 
-export interface BlobUpgrades {
-  speed: number;   // 0–5
-  harvest: number; // 0–5
-  fortune: number; // 0–5
-}
+/**
+ * Все существующие ветки апгрейдов.
+ * Фарм: speed / harvest / fortune / insight
+ * Бой:  vigor / guard / ferocity — влияют на Power (ноды, в будущем арена)
+ */
+export type UpgradeBranchId =
+  | 'speed'
+  | 'harvest'
+  | 'fortune'
+  | 'insight'
+  | 'vigor'
+  | 'guard'
+  | 'ferocity';
+
+/**
+ * Уровни веток (0–5). Частичный тип: у блоба есть только те ветки,
+ * которые ему выпали при призыве (см. Blob.branches).
+ */
+export type BlobUpgrades = Partial<Record<UpgradeBranchId, number>>;
 
 export type EvolutionStage = 0 | 1 | 2 | 3;
 // 0 = Base (Lv.1–4), 1 = Glow (Lv.5–9), 2 = Crystal (Lv.10–19), 3 = Ascended (Lv.20)
@@ -56,6 +70,12 @@ export interface Blob {
   level: number;
   xp: number;
   upgrades: BlobUpgrades; // NEW FIELD
+  /**
+   * Набор из 3 веток, доступных именно этому блобу. Роллится сервером
+   * при призыве. Старые блобы без поля считаются как классическая тройка
+   * speed/harvest/fortune (см. DEFAULT_BRANCHES).
+   */
+  branches?: UpgradeBranchId[];
   // New fields:
   mood: BlobMood;
   trait: TraitId | null;
@@ -183,6 +203,11 @@ export interface NetworkNode {
   lastCollected: number | null;
   // Defense
   fortifyBonus: number;    // 0-50, +10% for every 24h of holding
+  /**
+   * Множитель защиты от ветки Guard блоба-защитника (1 = нет ветки).
+   * Пишется сервером при захвате; старые ноды без поля считаются как 1.
+   */
+  guardMult?: number;
   // NPC
   isNPC: boolean;
   npcPower: number;        // NPC power if isNPC=true

@@ -14,11 +14,15 @@ import {
   UPGRADES,
   PKEYS,
   calcBlobPower,
+  calcAttackPower,
   canUpgrade,
   getEvolutionStage,
+  getBlobBranches,
+  rollBlobBranches,
+  getUpgradeValue,
   EREGEN,
 } from '../src/data.js';
-import type { ExpeditionEventType, PersonalityType } from '../src/types.js';
+import type { ExpeditionEventType, PersonalityType, UpgradeBranchId } from '../src/types.js';
 
 function getAdminDb(): Firestore {
   const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -179,6 +183,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!blobId || !branch) {
         return res.status(400).json({ error: 'Missing blobId or branch' });
       }
+      // Ветка из тела запроса — недоверенный ввод: сверяем со списком
+      // известных веток до похода в транзакцию.
+      if (!UPGRADES.some((u) => u.id === branch)) {
+        return res.status(400).json({ error: 'Invalid upgrade branch' });
+      }
       const updatedState = await claimUpgradeBlob(db, syncId, blobId, branch);
       return res.status(200).json(updatedState);
     }
@@ -247,15 +256,26 @@ async function claimExpedition(db: Firestore, syncId: string, blobId: string) {
 
     const maxHarvestLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.harvest || 0), 0);
     const maxFortuneLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.fortune || 0), 0);
+    const maxInsightLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.insight || 0), 0);
 
     const statsList = activeBlobs.map((b: any) => getBlobStats(b.personality, b.level));
     const avgLuck = statsList.reduce((acc: number, s: any) => acc + s.luck, 0) / statsList.length;
 
-    const fakeUpgrades = { speed: 0, harvest: maxHarvestLevel, fortune: maxFortuneLevel };
-    const { reward: upgradedReward, bonusChance } = applyUpgrades(baseReward, 0, 0.30, fakeUpgrades);
+    const fakeUpgrades = {
+      speed: 0,
+      harvest: maxHarvestLevel,
+      fortune: maxFortuneLevel,
+      insight: maxInsightLevel,
+    };
+    const { reward: upgradedReward, bonusChance, xpMult } = applyUpgrades(baseReward, 0, 0.30, fakeUpgrades);
     let reward = upgradedReward;
 
-    const fortuneBonus = maxFortuneLevel > 0 ? UPGRADES[2].levels[maxFortuneLevel - 1].value : 0;
+    // Insight — новая ветка: больше опыта за экспедицию
+    xpGain = Math.round(xpGain * xpMult);
+
+    // Поиск по id, а не по индексу UPGRADES: добавление новых веток
+    // не должно молча сдвигать расчёт fortune.
+    const fortuneBonus = getUpgradeValue('fortune', maxFortuneLevel, 0);
     const luckCritChance = Math.min(0.50, avgLuck * 0.0015 + fortuneBonus);
     if (Math.random() < luckCritChance) {
       reward = reward * 2;
@@ -699,21 +719,25 @@ async function claimAttackNode(
       throw new Error(`Max nodes reached (${maxNodes}). Summon more Blobs!`);
     }
 
+    // Ferocity усиливает атаку, Guard — защиту. Голый Power остаётся
+    // тем, что записывается в ноду: иначе бонус атакующего навсегда
+    // оседал бы в защите захваченной ноды.
     const myPower = calcBlobPower(blob);
+    const myAttack = calcAttackPower(blob);
     const defPower = node.isNPC
       ? node.npcPower
       : node.owner && node.owner.toLowerCase() !== activeOwnerId
       ? node.blobPower
       : 0;
 
-    const effectiveDefense = defPower * (1 + Number(node.fortifyBonus || 0) / 100);
+    const effectiveDefense = defPower * (1 + Number(node.fortifyBonus || 0) / 100) * Number(node.guardMult || 1);
 
     let win = false;
     if (!node.owner && !node.isNPC) {
       win = true;
-    } else if (myPower >= effectiveDefense) {
+    } else if (myAttack >= effectiveDefense) {
       win = true;
-    } else if (myPower >= effectiveDefense * 0.75) {
+    } else if (myAttack >= effectiveDefense * 0.75) {
       win = Math.random() < 0.5;
     } else {
       win = false;
@@ -726,6 +750,10 @@ async function claimAttackNode(
         blobId,
         blobPersonality: blob.personality,
         blobPower: myPower,
+        // Множитель защиты нового владельца — из его ветки Guard.
+        // Берём значение ветки напрямую: делить защиту на Power нельзя,
+        // при Power=0 это давало бы деление на ноль.
+        guardMult: getUpgradeValue('guard', blob.upgrades?.guard, 1),
         capturedAt: now,
         lastCollected: now,
         fortifyBonus: 0,
@@ -802,7 +830,9 @@ async function claimSummon(db: Firestore, syncId: string) {
       personality: rolledPersonality,
       level: 1,
       xp: 0,
-      upgrades: { speed: 0, harvest: 0, fortune: 0 },
+      upgrades: {},
+      // Набор веток роллится ТОЛЬКО на сервере и сохраняется вместе с блобом
+      branches: rollBlobBranches(),
       mood: { level: 3, lastFed: now, winsToday: 0, lossesToday: 0 },
       trait: null,
       isRadiant: false,
@@ -868,7 +898,8 @@ async function claimUnlockSpecies(db: Firestore, syncId: string, personality: Pe
       personality,
       level: 1,
       xp: 0,
-      upgrades: { speed: 0, harvest: 0, fortune: 0 },
+      upgrades: {},
+      branches: rollBlobBranches(),
       mood: { level: 3, lastFed: now, winsToday: 0, lossesToday: 0 },
       trait: null,
       isRadiant: false,
@@ -904,7 +935,7 @@ async function claimUpgradeBlob(
   db: Firestore,
   syncId: string,
   blobId: string,
-  branch: 'speed' | 'harvest' | 'fortune'
+  branch: UpgradeBranchId
 ) {
   const saveRef = db.collection('saves').doc(syncId);
 
@@ -925,7 +956,15 @@ async function claimUpgradeBlob(
 
     const blob = { ...blobs[blobIndex] };
     if (!blob.upgrades) {
-      blob.upgrades = { speed: 0, harvest: 0, fortune: 0 };
+      blob.upgrades = {};
+    }
+
+    // Набор веток берётся ИЗ СОХРАНЕНИЯ, а не из тела запроса.
+    // Иначе через devtools можно было бы прокачать любую ветку,
+    // включая боевые, которые блобу не выпадали.
+    const allowedBranches = getBlobBranches(blob);
+    if (!allowedBranches.includes(branch)) {
+      throw new Error('This Blob does not have that upgrade branch');
     }
 
     const currentLv = blob.upgrades[branch] || 0;
@@ -935,7 +974,8 @@ async function claimUpgradeBlob(
       blob.level,
       blob.upgrades,
       state.cubes || 0,
-      getEvolutionStage(blob.level)
+      getEvolutionStage(blob.level),
+      allowedBranches
     );
 
     if (!check.allowed) {
@@ -951,6 +991,9 @@ async function claimUpgradeBlob(
       ...blob.upgrades,
       [branch]: currentLv + 1,
     };
+    // Фиксируем набор веток в сохранении, если блоб был создан до этой
+    // системы: дальше он уже не «переедет» на другой набор.
+    blob.branches = allowedBranches;
 
     const newBlobs = [...blobs];
     newBlobs[blobIndex] = blob;
