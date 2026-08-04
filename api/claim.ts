@@ -3,6 +3,7 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { verifySessionToken } from './auth.js';
 import { executeReactorClose } from './reactor-close.js';
+import { arenaRegister, arenaFight } from './arena.js';
 import {
   ZONES,
   applyUpgrades,
@@ -153,6 +154,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const updatedState = await claimReactorContribute(db, syncId, walletAddress, eventId, amount);
       return res.status(200).json(updatedState);
+    }
+
+    if (type === 'arena_register') {
+      const { blobIds } = req.body || {};
+      const updatedState = await arenaRegister(db, syncId, walletAddress, blobIds);
+      return res.status(200).json(updatedState);
+    }
+
+    if (type === 'arena_fight') {
+      // Клиент присылает только намерение: соперника, бой и лог считает сервер
+      const result = await arenaFight(db, syncId, walletAddress);
+      return res.status(200).json(result);
     }
 
     if (type === 'attack_node') {

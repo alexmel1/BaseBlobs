@@ -22,6 +22,7 @@ import {
   Radar,
   Database,
   Atom,
+  Swords,
   Cloud,
   RefreshCw,
   Code,
@@ -53,6 +54,8 @@ import { TRAITS, TRAIT_KEYS } from './data';
 import { playExpeditionCompleteSound, playLevelUpSound } from './utils/audio';
 import { saveGameState, loadGameState, isOfflineError, subscribeToGameState, RevConflictError } from './lib/syncService';
 import { useReactor } from './hooks/useReactor';
+import { useArena } from './hooks/useArena';
+import { ArenaScreen } from './components/ArenaScreen';
 import { ReactorModal } from './components/ReactorModal';
 import { useAccount, useDisconnect } from 'wagmi';
 import { appKit } from './lib/web3Config';
@@ -181,6 +184,12 @@ export function validateAndMigrateState(parsed: any): GameState {
     hasOGBadge: Boolean(parsed.hasOGBadge),
     ogBadgePurchasedAt: parsed.ogBadgePurchasedAt || null,
     arenaRegisteredBlobId: parsed.arenaRegisteredBlobId || null,
+    // Отряд арены: без переноса он терялся бы на каждом ответе сервера,
+    // т.к. миграция собирает стейт по явному списку полей.
+    arenaSquadIds: Array.isArray(parsed.arenaSquadIds)
+      ? parsed.arenaSquadIds.filter((id: any) => migratedBlobs.some((b: any) => b.id === id))
+      : [],
+    arenaBadges: Array.isArray(parsed.arenaBadges) ? parsed.arenaBadges : [],
     lastArenaProcessedWeek: parsed.lastArenaProcessedWeek || null,
     lastArenaRank: parsed.lastArenaRank || null,
     lastArenaRewardClaimed: Boolean(parsed.lastArenaRewardClaimed),
@@ -643,6 +652,17 @@ export default function App() {
       }
       return prev;
     }, true);
+  });
+
+  // Арена: бой, рейтинг и кубы считает сервер (api/arena.ts).
+  // Клиент только применяет вернувшийся стейт — своей арифметики тут нет.
+  const arena = useArena({
+    walletAddress: rawWalletAddress,
+    syncId,
+    onServerState: (serverState: any) => {
+      const validated = validateAndMigrateState(serverState);
+      syncAndSetState(validated);
+    },
   });
 
   // Get active selected Blob
@@ -1451,7 +1471,7 @@ export default function App() {
           /* Standard Section Headers as shown on screen 2 & 3 */
           <div className="flex items-center gap-1.5">
             <span className="text-sm">
-              {currentScreen === 'expeditions' ? '🗺️' : currentScreen === 'upgrades' ? '⚡' : currentScreen === 'shop' ? '🛍️' : currentScreen === 'reactor' ? '☢️' : '📋'}
+              {currentScreen === 'expeditions' ? '🗺️' : currentScreen === 'upgrades' ? '⚡' : currentScreen === 'shop' ? '🛍️' : currentScreen === 'arena' ? '⚔️' : currentScreen === 'reactor' ? '☢️' : '📋'}
             </span>
             <span className="text-white text-xs font-black tracking-tight capitalize">
               {currentScreen}
@@ -2602,6 +2622,31 @@ export default function App() {
 
           </div>
         )}
+        {currentScreen === 'arena' && (
+          <ArenaScreen
+            blobs={state.blobs}
+            squad={arena.squad}
+            isRegistered={arena.isRegistered}
+            isCalibrating={arena.isCalibrating}
+            matchesPlayed={arena.matchesPlayed}
+            battlesLeft={arena.battlesLeft}
+            dailyResetAt={arena.dailyResetAt}
+            season={arena.season}
+            seasonEndsAt={arena.seasonEndsAt}
+            matches={arena.matches}
+            leaderboard={arena.leaderboard}
+            myRank={arena.myRank}
+            walletAddress={rawWalletAddress}
+            isFighting={arena.isFighting}
+            isRegistering={arena.isRegistering}
+            error={arena.error}
+            lastResult={arena.lastResult}
+            onRegister={arena.registerSquad}
+            onFight={arena.fight}
+            onClearError={arena.clearError}
+          />
+        )}
+
         {currentScreen === 'reactor' && (
           <ReactorModal
             phase={reactor.reactor?.phase ?? null}
@@ -2636,6 +2681,7 @@ export default function App() {
           { id: 'expeditions', label: 'Explore', icon: Radar },
           { id: 'upgrades', label: 'Upgrades', icon: Zap },
           { id: 'shop', label: 'Shop', icon: Database },
+          { id: 'arena', label: 'Arena', icon: Swords },
           { id: 'reactor', label: 'Reactor', icon: Atom }
         ].map((item) => {
           const isActive = currentScreen === item.id;

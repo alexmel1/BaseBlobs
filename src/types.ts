@@ -138,10 +138,93 @@ export interface GameState {
   ogBadgePurchasedAt: number | null;
   initialized: boolean;
   // Weekly Arena
+  /** @deprecated одиночный боец от прошлой идеи арены. Не использовать — см. arenaSquadIds */
   arenaRegisteredBlobId?: string | null;
+  /** Отряд для арены: ровно 3 id блобов, порядок = порядок слотов */
+  arenaSquadIds?: string[];
   lastArenaProcessedWeek?: string | null;
   lastArenaRank?: number | null;
   lastArenaRewardClaimed?: boolean;
+  /** Значки сезонов арены, полученные игроком */
+  arenaBadges?: ArenaBadge[];
+}
+
+// ─── ARENA ────────────────────────────────────────────────
+
+/** Награда за сезон: значок с номером сезона и достигнутым рангом */
+export interface ArenaBadge {
+  season: number;
+  /** champion = 1 место, elite = 2-3, veteran = 4-10 */
+  tier: 'champion' | 'elite' | 'veteran';
+  rank: number;
+  awardedAt: number;
+}
+
+/** Замороженные боевые характеристики блоба на момент регистрации отряда */
+export interface ArenaFighter {
+  blobId: string;
+  personality: PersonalityType;
+  level: number;
+  hp: number;
+  atk: number;
+  initiative: number;
+  critChance: number;
+  doubleChance: number;
+}
+
+/** Снимок отряда в коллекции arena_squads */
+export interface ArenaSquad {
+  wallet: string;
+  playerName: string;
+  fighters: ArenaFighter[];
+  mmr: number;
+  wins: number;
+  losses: number;
+  season: number;
+  /** Сколько боёв проведено сегодня (лимит ARENA_CONFIG.dailyMatches) */
+  matchesUsedToday: number;
+  /** Когда счётчик боёв сбросится — считает сервер */
+  dailyResetAt: number;
+  /** Матчей в калибровке: пока < calibrationMatches, рейтинг нестабилен */
+  matchesPlayed: number;
+  registeredAt: number;
+}
+
+/** Одна запись в логе боя — клиент только проигрывает её */
+export interface ArenaLogEntry {
+  /** Номер дуэли: 0, 1 или 2 */
+  duel: number;
+  /** true = бил игрок, false = бил соперник */
+  byPlayer: boolean;
+  damage: number;
+  crit: boolean;
+  double: boolean;
+  /** HP после удара */
+  hpLeftPlayer: number;
+  hpLeftEnemy: number;
+}
+
+export interface ArenaDuelResult {
+  duel: number;
+  playerWon: boolean;
+}
+
+/** Результат матча, каким его отдаёт сервер */
+export interface ArenaMatchResult {
+  matchId: string;
+  opponentName: string;
+  opponentWallet: string | null;
+  isBot: boolean;
+  duels: ArenaDuelResult[];
+  score: string;
+  playerWon: boolean;
+  mmrBefore: number;
+  mmrAfter: number;
+  mmrDelta: number;
+  cubesEarned: number;
+  log: ArenaLogEntry[];
+  playedAt: number;
+  opponentFighters: ArenaFighter[];
 }
 
 // ─── MOOD SYSTEM ──────────────────────────────────────────

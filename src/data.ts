@@ -7,6 +7,7 @@ import {
   Personality, Zone, Quest, PersonalityType, BlobUpgrades, EvolutionStage,
   TraitId, Trait, ExpeditionEventType, ExpeditionEvent, BlobMood,
   NetworkNode, NodeTier, NodeType, Blob, UpgradeBranchId,
+  ArenaFighter, ArenaLogEntry, ArenaDuelResult,
 } from './types.js';
 
 export const P: Record<PersonalityType, Personality> = {
@@ -675,6 +676,8 @@ export const DEFAULT_GAMESTATE_NEW_FIELDS = {
   totalCubesAllTime: 0,
   totalExpeditionsAllTime: 0,
   arenaRegisteredBlobId: null,
+  arenaSquadIds: [],
+  arenaBadges: [],
   lastArenaProcessedWeek: null,
   lastArenaRank: null,
   lastArenaRewardClaimed: false,
@@ -760,4 +763,180 @@ export function canAttackNode(
   const effectiveDefense =
     defenderPower * (1 + (node.fortifyBonus || 0) / 100) * (node.guardMult || 1);
   return blobPower > effectiveDefense * 0.8;
+}
+
+// ─── ARENA ────────────────────────────────────────────────
+// Полный дизайн — в ARENA.md. Бой считает ТОЛЬКО сервер (api/claim.ts);
+// эти функции живут здесь, чтобы клиент мог показывать те же числа в UI.
+
+export const ARENA_CONFIG = {
+  /** Ровно столько блобов в отряде */
+  squadSize: 3,
+  /** Боёв в сутки; не накапливаются */
+  dailyMatches: 5,
+  /** Первые N матчей — калибровка: высокий K и подбор по уровню */
+  calibrationMatches: 5,
+  startingMmr: 1000,
+  /** Пол рейтинга после калибровки */
+  mmrFloor: 800,
+  kBase: 24,
+  kCalibration: 60,
+  /** Разгром весит больше, чем победа 2:1 */
+  kSweep: 28,
+  kNarrow: 20,
+  /** Победа над ботом даёт половину прироста, поражение не отнимает ничего */
+  botMmrFactor: 0.5,
+  /** Окно подбора по MMR и шаг расширения, если никого нет */
+  mmrWindow: 100,
+  mmrWindowStep: 150,
+  mmrWindowMax: 400,
+  /** Окно подбора по среднему уровню отряда во время калибровки */
+  levelWindow: 3,
+  /** Жёсткий предел ударов в дуэли: два танка с Guard 5 иначе зациклятся */
+  maxTurnsPerDuel: 20,
+  hpMult: 3,
+  atkMult: 0.4,
+  critMult: 1.6,
+  /** Кубы за матч по счёту */
+  rewards: {
+    '3:0': 250,
+    '2:1': 180,
+    '1:2': 60,
+    '0:3': 30,
+  } as Record<string, number>,
+} as const;
+
+/**
+ * Замораживает боевые характеристики блоба.
+ *
+ * Настроение (mood) здесь намеренно не участвует: кормление в игре не
+ * реализовано и вводить его не планируется (см. ARENA.md §13).
+ */
+export function buildArenaFighter(blob: Blob): ArenaFighter {
+  const stats = getBlobStats(blob.personality, blob.level);
+  return {
+    blobId: blob.id,
+    personality: blob.personality,
+    level: blob.level,
+    hp: Math.max(1, Math.round(calcDefensePower(blob) * ARENA_CONFIG.hpMult)),
+    atk: Math.max(1, Math.round(calcAttackPower(blob) * ARENA_CONFIG.atkMult)),
+    initiative: stats.speed,
+    critChance: Math.min(0.40, stats.luck * 0.003),
+    doubleChance: Math.min(0.35, stats.speed * 0.004),
+  };
+}
+
+/**
+ * Одна дуэль. `rng` передаётся снаружи, чтобы сервер мог считать бой
+ * детерминированно и сохранить лог — клиент лог только проигрывает.
+ */
+function resolveDuel(
+  duel: number,
+  player: ArenaFighter,
+  enemy: ArenaFighter,
+  rng: () => number,
+  log: ArenaLogEntry[],
+): boolean {
+  let hpPlayer = player.hp;
+  let hpEnemy = enemy.hp;
+
+  // Инициатива решает, кто бьёт первым; при равенстве — игрок
+  let playerTurn = player.initiative >= enemy.initiative;
+
+  for (let turn = 0; turn < ARENA_CONFIG.maxTurnsPerDuel; turn++) {
+    const attacker = playerTurn ? player : enemy;
+    const crit = rng() < attacker.critChance;
+    const double = rng() < attacker.doubleChance;
+
+    const swings = double ? 2 : 1;
+    let damage = 0;
+    for (let s = 0; s < swings; s++) {
+      const variance = 0.85 + rng() * 0.30;
+      damage += attacker.atk * variance * (crit ? ARENA_CONFIG.critMult : 1);
+    }
+    damage = Math.max(1, Math.round(damage));
+
+    if (playerTurn) {
+      hpEnemy = Math.max(0, hpEnemy - damage);
+    } else {
+      hpPlayer = Math.max(0, hpPlayer - damage);
+    }
+
+    log.push({
+      duel,
+      byPlayer: playerTurn,
+      damage,
+      crit,
+      double,
+      hpLeftPlayer: hpPlayer,
+      hpLeftEnemy: hpEnemy,
+    });
+
+    if (hpPlayer <= 0 || hpEnemy <= 0) break;
+    playerTurn = !playerTurn;
+  }
+
+  // Кап по ударам: побеждает тот, у кого больше осталось в процентах
+  if (hpPlayer > 0 && hpEnemy > 0) {
+    return hpPlayer / player.hp >= hpEnemy / enemy.hp;
+  }
+  return hpEnemy <= 0;
+}
+
+/** Матч = три дуэли по слотам. Возвращает исходы и полный лог. */
+export function resolveArenaMatch(
+  playerSquad: ArenaFighter[],
+  enemySquad: ArenaFighter[],
+  rng: () => number = Math.random,
+): { duels: ArenaDuelResult[]; log: ArenaLogEntry[]; playerWins: number } {
+  const duels: ArenaDuelResult[] = [];
+  const log: ArenaLogEntry[] = [];
+  let playerWins = 0;
+
+  for (let i = 0; i < ARENA_CONFIG.squadSize; i++) {
+    const p = playerSquad[i];
+    const e = enemySquad[i];
+    if (!p || !e) continue;
+    const won = resolveDuel(i, p, e, rng, log);
+    if (won) playerWins++;
+    duels.push({ duel: i, playerWon: won });
+  }
+
+  return { duels, log, playerWins };
+}
+
+/** Elo с поправками на разгром, калибровку и бота. */
+export function calcMmrDelta(opts: {
+  playerMmr: number;
+  opponentMmr: number;
+  playerWins: number;
+  isCalibrating: boolean;
+  isBot: boolean;
+}): number {
+  const { playerMmr, opponentMmr, playerWins, isCalibrating, isBot } = opts;
+  const won = playerWins >= 2;
+
+  // Поражение боту не отнимает рейтинг — бот появляется не по вине игрока
+  if (isBot && !won) return 0;
+
+  const expected = 1 / (1 + Math.pow(10, (opponentMmr - playerMmr) / 400));
+  const actual = won ? 1 : 0;
+
+  let k = isCalibrating
+    ? ARENA_CONFIG.kCalibration
+    : playerWins === 3 || playerWins === 0
+    ? ARENA_CONFIG.kSweep
+    : ARENA_CONFIG.kNarrow;
+
+  if (isBot) k *= ARENA_CONFIG.botMmrFactor;
+
+  return Math.round(k * (actual - expected));
+}
+
+export function arenaScoreLabel(playerWins: number): string {
+  return `${playerWins}:${ARENA_CONFIG.squadSize - playerWins}`;
+}
+
+export function arenaRewardFor(playerWins: number): number {
+  return ARENA_CONFIG.rewards[arenaScoreLabel(playerWins)] ?? 0;
 }

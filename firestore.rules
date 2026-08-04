@@ -23,7 +23,7 @@ service cloud.firestore {
 
     match /leaderboard/{docId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if false; // Было write:if true — любой мог переписать таблицу из devtools
     }
 
     match /og_badges/{docId} {
@@ -31,8 +31,29 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Legacy-коллекция от прошлой идеи арены. Была открыта на запись всем;
+    // закрыта, актуальная арена живёт в arena_squads / arena_matches / arena_seasons.
     match /arena/{docId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ─── ARENA (см. ARENA.md) ───
+    // Читать может любой (лидерборд, лента матчей), писать — только Admin SDK
+    // через /api/claim.ts: бой, рейтинг и награды считает исключительно сервер.
+    match /arena_squads/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /arena_matches/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /arena_seasons/{docId} {
+      allow read: if true;
+      allow write: if false;
     }
 
     match /reactor_global/{docId} {
