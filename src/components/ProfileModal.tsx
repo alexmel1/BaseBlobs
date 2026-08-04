@@ -1,6 +1,6 @@
 import React from 'react';
 import { Blob } from '../types';
-import { TRAITS } from '../data';
+import { TRAITS, UPGRADES, getBlobBranches } from '../data';
 
 interface ProfileModalProps {
   playerName: string;
@@ -139,9 +139,17 @@ export function ProfileModal({
                       </span>
                     )}
                   </div>
-                  <div className="text-slate-500 text-[9px] mt-0.5">
-                    S{blob.upgrades.speed} H{blob.upgrades.harvest} F{blob.upgrades.fortune}
-                    {' · '}{blob.totalExpeditions ?? 0} exp
+                  <div className="text-slate-500 text-[9px] mt-0.5 flex items-center gap-1 flex-wrap">
+                    {/* Ветки у каждого блоба свои — жёсткий список S/H/F
+                        показывал пустоту тем, кому эти ветки не выпали */}
+                    {UPGRADES
+                      .filter((u) => getBlobBranches(blob).includes(u.id))
+                      .map((u) => (
+                        <span key={u.id} title={u.name}>
+                          {u.icon}{blob.upgrades?.[u.id] ?? 0}
+                        </span>
+                      ))}
+                    <span>{' · '}{blob.totalExpeditions ?? 0} exp</span>
                   </div>
                 </div>
                 <div style={{ color }} className="text-[10px] font-bold flex-shrink-0">

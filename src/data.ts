@@ -219,8 +219,8 @@ export interface UpgradeBranch {
   name: string;
   desc: string;
   color: string;
-  /** farm — влияет на экспедиции, combat — на Power (ноды, арена) */
-  kind: 'farm' | 'combat';
+  /** mining — влияет на экспедиции, combat — на Power (ноды, арена) */
+  kind: 'mining' | 'combat';
   // For each level (index 0 = level 1):
   levels: {
     cost: number;       // cost in cubes
@@ -237,7 +237,7 @@ export const UPGRADES: UpgradeBranch[] = [
     name: 'Speed',
     desc: 'Reduces expedition time',
     color: '#2a78d6',
-    kind: 'farm',
+    kind: 'mining',
     levels: [
       { cost: 50,   unlockLv: 1,  effect: '-8% time',  value: 0.92 },
       { cost: 120,  unlockLv: 4,  effect: '-15% time', value: 0.85 },
@@ -247,12 +247,14 @@ export const UPGRADES: UpgradeBranch[] = [
     ],
   },
   {
+    // id остаётся 'harvest': он записан в сохранениях игроков,
+    // переименование обнулило бы уже купленные уровни.
     id: 'harvest',
-    icon: '💰',
-    name: 'Harvest',
+    icon: '⛏️',
+    name: 'Extraction',
     desc: 'More cubes per expedition',
     color: '#1baf7a',
-    kind: 'farm',
+    kind: 'mining',
     levels: [
       { cost: 50,   unlockLv: 1,  effect: '+10% cubes', value: 1.10 },
       { cost: 120,  unlockLv: 4,  effect: '+22% cubes', value: 1.22 },
@@ -267,7 +269,7 @@ export const UPGRADES: UpgradeBranch[] = [
     name: 'Fortune',
     desc: 'Bonus event chance',
     color: '#eda100',
-    kind: 'farm',
+    kind: 'mining',
     levels: [
       { cost: 50,   unlockLv: 1,  effect: '+3% bonus chance',  value: 0.03 },
       { cost: 120,  unlockLv: 4,  effect: '+8% bonus chance',  value: 0.08 },
@@ -282,7 +284,7 @@ export const UPGRADES: UpgradeBranch[] = [
     name: 'Insight',
     desc: 'More XP per expedition',
     color: '#7c5cff',
-    kind: 'farm',
+    kind: 'mining',
     levels: [
       { cost: 50,   unlockLv: 1,  effect: '+10% XP', value: 1.10 },
       { cost: 120,  unlockLv: 4,  effect: '+20% XP', value: 1.20 },
@@ -358,16 +360,16 @@ export function getBlobBranches(blob: { branches?: UpgradeBranchId[] } | null | 
 
 /**
  * Ролл набора веток для нового блоба: гарантированно хотя бы одна
- * фармовая и одна боевая, чтобы блоб не оказался бесполезен в одном
+ * добывающая и одна боевая, чтобы блоб не оказался бесполезен в одном
  * из режимов. Остальные добираются случайно из общего пула.
  */
 export function rollBlobBranches(): UpgradeBranchId[] {
   const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-  const farm = UPGRADES.filter((u) => u.kind === 'farm').map((u) => u.id);
+  const mining = UPGRADES.filter((u) => u.kind === 'mining').map((u) => u.id);
   const combat = UPGRADES.filter((u) => u.kind === 'combat').map((u) => u.id);
 
-  const chosen: UpgradeBranchId[] = [pick(farm), pick(combat)];
+  const chosen: UpgradeBranchId[] = [pick(mining), pick(combat)];
 
   const rest = UPGRADES
     .map((u) => u.id)

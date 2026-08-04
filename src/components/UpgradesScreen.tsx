@@ -90,7 +90,7 @@ export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <p style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{branch.name}</p>
-                  {/* Farm / Combat tag — tells the player what this branch is for */}
+                  {/* Mining / Combat tag — tells the player what this branch is for */}
                   <span style={{
                     fontSize: 8,
                     fontWeight: 800,
@@ -102,7 +102,7 @@ export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade
                     background: branch.kind === 'combat' ? 'rgba(255,122,47,0.12)' : 'rgba(27,175,122,0.12)',
                     border: `1px solid ${branch.kind === 'combat' ? 'rgba(255,122,47,0.35)' : 'rgba(27,175,122,0.35)'}`,
                   }}>
-                    {branch.kind === 'combat' ? 'Combat' : 'Farm'}
+                    {branch.kind === 'combat' ? 'Combat' : 'Mining'}
                   </span>
                 </div>
                 <p style={{ color: 'rgba(180,200,255,0.5)', fontSize: 10 }}>{branch.desc}</p>

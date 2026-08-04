@@ -337,7 +337,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
                               borderColor: branch.kind === 'combat' ? 'rgba(255,122,47,0.35)' : 'rgba(27,175,122,0.35)',
                             }}
                           >
-                            {branch.kind === 'combat' ? 'Combat' : 'Farm'}
+                            {branch.kind === 'combat' ? 'Combat' : 'Mining'}
                           </span>
                         </div>
                       ))}

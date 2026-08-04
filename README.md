@@ -94,14 +94,14 @@ Random events can fire on Expedition completion (bonus multipliers, rare drops, 
 
 Every Blob is born with its **own random set of 3 branches out of 7**. The set is rolled server-side at summon and can never be rerolled — two Blobs of the same personality can play completely differently. Each branch has 5 levels.
 
-Every Blob is guaranteed at least one Farm and one Combat branch, so no Blob is ever useless in either mode.
+Every Blob is guaranteed at least one Mining and one Combat branch, so no Blob is ever useless in either mode.
 
-## 🌾 Farm branches
+## ⛏️ Mining branches
 
 | Branch | Effect | Max Bonus |
 |--------|--------|-----------|
 | ⚡ Speed | Reduces expedition time | −45% |
-| 💰 Harvest | More cubes per expedition | +75% |
+| ⛏️ Extraction | More cubes per expedition | +75% |
 | 🍀 Fortune | Increases crit chance for double cube rewards | +30% |
 | 📚 Insight | More XP per expedition | +65% |
 
@@ -241,7 +241,7 @@ A recurring, community-wide event: contribute Cubes toward a shared pool target.
 
 # 🆕 Latest Updates
 
-- **Per-Blob upgrade branches** — 7 branches total, each Blob rolls its own 3 at summon. Farm vs Combat split, guaranteed one of each. Existing Blobs keep Speed / Harvest / Fortune, so nothing invested is lost.
+- **Per-Blob upgrade branches** — 7 branches total, each Blob rolls its own 3 at summon. Mining vs Combat split, guaranteed one of each. Existing Blobs keep their original three, so nothing invested is lost.
 - **Combat branches** — Vigor, Guard and Ferocity now feed real Node combat maths (attack, defense, fortification) and are the foundation for the upcoming Arena.
 - **Data Storm rebalanced** — was a flat −30% Cube punishment, now a trade: ×0.85 Cubes for ×1.3 XP. Jackpot, Awakening and Blob Charm all got slightly more common.
 - **Reactor is a full screen** — no longer a blocking modal; navigate freely from the bottom bar like every other section.

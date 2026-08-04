@@ -67,7 +67,7 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
             </div>
 
             <p className="text-slate-400 text-[11px] italic">
-              Plan your Cube spending — later slots cost more, but each new Blob is a fresh roll on personality, meaning more coverage across all specializations (XP farming, crit-chasing, Node defense, and more).
+              Plan your Cube spending — later slots cost more, but each new Blob is a fresh roll on personality and branches, meaning more coverage across all specializations (XP gain, crit-chasing, Node defense, and more).
             </p>
           </div>
 
@@ -110,7 +110,7 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
                 <span className="font-bold text-blue-400">Happy</span> — <span className="text-slate-300">+20% bonus XP yield per Expedition. Optimized for fast leveling.</span>
               </div>
               <div className="p-2 bg-emerald-950/30 border border-emerald-500/20 rounded-xl">
-                <span className="font-bold text-emerald-400">Lucky</span> — <span className="text-slate-300">Highest base LUCK stat, plus a flat +15% Cube reward multiplier. Built for crit-farming.</span>
+                <span className="font-bold text-emerald-400">Lucky</span> — <span className="text-slate-300">Highest base LUCK stat, plus a flat +15% Cube reward multiplier. Built for chasing crits.</span>
               </div>
               <div className="p-2 bg-purple-950/30 border border-purple-500/20 rounded-xl">
                 <span className="font-bold text-purple-400">Cosmic</span> — <span className="text-slate-300">Unlocks a +25% Cube reward multiplier once it reaches Level 10. Late-game payoff.</span>
@@ -137,11 +137,11 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
             </p>
 
             <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400 pt-1">
-              Farm branches
+              Mining branches
             </div>
             <ul className="space-y-1.5 text-[11px] font-mono">
               <li className="bg-black/20 p-2 rounded-xl border border-white/5">
-                <strong className="text-amber-400">Harvest:</strong> Increases base Cube yield from Expeditions.
+                <strong className="text-amber-400">Extraction:</strong> Increases base Cube yield from Expeditions.
               </li>
               <li className="bg-black/20 p-2 rounded-xl border border-white/5">
                 <strong className="text-cyan-400">Speed:</strong> Further reduces Expedition duration.
@@ -170,7 +170,7 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
             </ul>
 
             <p className="text-slate-400 text-[11px]">
-              Every Blob is guaranteed at least one Farm and one Combat branch. Higher tiers
+              Every Blob is guaranteed at least one Mining and one Combat branch. Higher tiers
               unlock as the Blob levels up; how many branches you can develop at once depends
               on evolution stage (1 at Base, 2 at Glow, 3 at Crystal).
             </p>
@@ -262,7 +262,7 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
             </div>
             <ul className="space-y-1.5 text-slate-300 text-[11px] list-disc list-inside">
               <li>Keep Expeditions and Node collection cycling — idle yield compounds fast.</li>
-              <li>Check each Blob's branch set before investing — a Blob with Vigor or Ferocity is your Node raider, one with Harvest and Insight is your farmer. Build to what it rolled instead of fighting it.</li>
+              <li>Check each Blob's branch set before investing — a Blob with Vigor or Ferocity is your Node raider, one with Extraction and Insight is your miner. Build to what it rolled instead of fighting it.</li>
               <li>Summon more Blobs to hunt for branch sets you're missing: the roll is fixed at summon and can't be changed later.</li>
               <li>Watch for open Reactor events — limited-time window to convert Cubes into real $BLOBS.</li>
             </ul>

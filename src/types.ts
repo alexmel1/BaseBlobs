@@ -43,12 +43,12 @@ export interface Quest {
 
 /**
  * Все существующие ветки апгрейдов.
- * Фарм: speed / harvest / fortune / insight
+ * Добыча: speed / harvest / fortune / insight
  * Бой:  vigor / guard / ferocity — влияют на Power (ноды, в будущем арена)
  */
 export type UpgradeBranchId =
   | 'speed'
-  | 'harvest'
+  | 'harvest'   // отображается как Extraction; id не меняем — он в сохранениях
   | 'fortune'
   | 'insight'
   | 'vigor'

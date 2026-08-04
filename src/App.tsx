@@ -1645,7 +1645,7 @@ export default function App() {
                   <div className="text-slate-500 text-[9px] font-mono mt-0.5 truncate">
                     {(state.activeExpeditions?.length ?? 0) > 0
                       ? `${state.activeExpeditions.length} in progress · ${state.energy} ⚡ left`
-                      : `Harvest Cubes & XP · ${state.energy} ⚡ available`}
+                      : `Mine Cubes & XP · ${state.energy} ⚡ available`}
                   </div>
                 </div>
 
