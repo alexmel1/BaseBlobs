@@ -250,7 +250,7 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
               <h3>The Reactor</h3>
             </div>
             <p className="text-slate-300">
-              A recurring, community-wide event: contribute Cubes toward a shared pool target. When the target is hit (or the event closes), every contributor gets a proportional share of $BLOBS tokens, claimable directly to your wallet on Base. Claiming is a real on-chain transaction — small gas fee applies.
+              A recurring, community-wide event: contribute Cubes toward a shared pool target. When the target is hit (or the event closes), every contributor gets a proportional share of USDC rewards, claimable directly to your wallet on Base. Claiming is a real on-chain transaction — small gas fee applies.
             </p>
           </div>
 
@@ -264,7 +264,7 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
               <li>Keep Expeditions and Node collection cycling — idle yield compounds fast.</li>
               <li>Check each Blob's branch set before investing — a Blob with Vigor or Ferocity is your Node raider, one with Extraction and Insight is your miner. Build to what it rolled instead of fighting it.</li>
               <li>Summon more Blobs to hunt for branch sets you're missing: the roll is fixed at summon and can't be changed later.</li>
-              <li>Watch for open Reactor events — limited-time window to convert Cubes into real $BLOBS.</li>
+              <li>Watch for open Reactor events — limited-time window to convert Cubes into real USDC rewards.</li>
             </ul>
           </div>
 

@@ -49,11 +49,14 @@ function fmtCountdown(ms: number): string {
 
 const QUICK_AMOUNTS = [100, 500, 1000, 5000, 10000];
 
+/** Флаг доступности реактора. Когда false — показываем анонс USDC Reward Pool */
+export const REACTOR_LIVE = false;
+
 /** Палитра под фазу: ядро, акценты и тексты берут цвет отсюда */
 const PHASE_THEME: Record<string, { color: string; label: string; sub: string }> = {
   collecting:   { color: '#00aaff', label: 'Collecting',    sub: 'Feed the core with Cubes' },
   synthesizing: { color: '#a855f7', label: 'Synthesizing',  sub: 'Calculating allocations' },
-  claimable:    { color: '#10b981', label: 'Claim Open',    sub: 'Your $BLOBS are ready' },
+  claimable:    { color: '#10b981', label: 'Claim Open',    sub: 'Your USDC is ready' },
   closed:       { color: '#64748b', label: 'Closed',        sub: 'Next event incoming' },
   inactive:     { color: '#475569', label: 'Offline',       sub: 'No active event' },
 };
@@ -197,6 +200,115 @@ export function ReactorModal({
     ? (myContribution / totalContributed) * 100
     : 0;
 
+  if (!REACTOR_LIVE) {
+    return (
+      <div className="flex flex-col flex-1 animate-fade-in p-4 pb-6">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-11 h-11 rounded-2xl flex items-center justify-center border bg-blue-500/15 border-blue-500/40"
+              style={{ boxShadow: '0 0 20px rgba(59,130,246,0.25)' }}
+            >
+              <Atom className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-white font-black text-lg leading-tight tracking-tight font-display">
+                USDC Reward Pool
+              </h2>
+              <p className="text-blue-400 text-[11px] font-bold mt-0.5 uppercase tracking-wider font-mono">
+                Coming Soon
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Core Canvas (Visual backdrop decoration) */}
+        <div className="relative mb-4">
+          <div
+            className="relative w-full h-52 overflow-hidden rounded-3xl border border-white/10 shadow-2xl"
+            style={{ background: 'radial-gradient(circle at 50% 45%, rgba(6,10,31,0.5), #04081a)' }}
+          >
+            <ReactorCoreCanvas
+              progress={100}
+              color="#00aaff"
+              flashKey={0}
+              spinning={true}
+            />
+
+            {/* Badge overlay */}
+            <div className="absolute bottom-3 inset-x-0 text-center pointer-events-none">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold text-blue-300 bg-[#04081a]/80 border border-blue-500/30 backdrop-blur-md shadow-lg font-mono">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                Preparing Season 1
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Announcement Box */}
+        <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 sm:p-5 text-center mb-4">
+          <h3 className="text-white font-black text-base sm:text-lg mb-2 font-display">
+            USDC Reward Pool — Coming Soon
+          </h3>
+          <p className="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
+            Keep collecting Cubes — a season with real USDC rewards is on the way. Cubes you hold now will count toward it.
+          </p>
+
+          {/* Current player Cubes counter */}
+          <div className="inline-flex items-center justify-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-2.5 text-amber-300 font-mono font-bold text-sm shadow-inner">
+            <span>Your Cubes:</span>
+            <span className="text-amber-400 text-base font-black">{cubes.toLocaleString()} 💠</span>
+          </div>
+        </div>
+
+        {/* Advanced Firebase setup drawer if needed */}
+        <div className="mt-auto pt-3 border-t border-white/5">
+          {showFirebaseSetup ? (
+            <div className="space-y-2">
+              <textarea
+                value={firebaseInput}
+                onChange={(e) => setFirebaseInput(e.target.value)}
+                placeholder="Paste firebaseConfig object"
+                className="w-full bg-white/5 border border-white/10 rounded-xl p-2 text-[11px] text-slate-300 font-mono outline-none focus:border-blue-500/40"
+                rows={3}
+              />
+              {firebaseSetupError && (
+                <p className="text-red-400 text-[11px]">{firebaseSetupError}</p>
+              )}
+              {firebaseSetupSuccess && (
+                <p className="text-emerald-400 text-[11px]">{firebaseSetupSuccess}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveFirebaseConfig}
+                  className="flex-1 py-2 rounded-xl bg-blue-600/70 border border-blue-500/40 text-white text-xs font-bold cursor-pointer"
+                >
+                  Save config
+                </button>
+                {hasCustomFirebase && (
+                  <button
+                    onClick={handleResetFirebaseConfig}
+                    className="px-3 py-2 rounded-xl border border-white/10 text-slate-400 text-xs cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowFirebaseSetup(true)}
+              className="text-slate-600 text-[10px] hover:text-slate-400 transition-colors cursor-pointer"
+            >
+              Advanced: Firebase config
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col flex-1 animate-fade-in">
           <div className="p-4 pb-6">
@@ -318,7 +430,7 @@ export function ReactorModal({
                   <StatTile
                     icon={<TrendingUp className="w-3 h-3" />}
                     label="Pool"
-                    value={`${totalReward.toLocaleString()} $BLOBS`}
+                    value={`${totalReward.toLocaleString()} USDC`}
                     accent={theme.color}
                   />
                 </div>
@@ -393,7 +505,7 @@ export function ReactorModal({
                     )}
 
                     <p className="text-slate-600 text-[10px] text-center mt-2">
-                      More Cubes = larger share of the {totalReward.toLocaleString()} $BLOBS pool
+                      More Cubes = larger share of the {totalReward.toLocaleString()} USDC pool
                     </p>
                   </>
                 ) : (
@@ -450,7 +562,7 @@ export function ReactorModal({
                       </div>
                       <p className="text-emerald-400 font-black text-lg">Claimed!</p>
                       <p className="text-slate-400 text-xs mt-2">
-                        {myAllocation.toLocaleString()} $BLOBS sent to your wallet.
+                        {myAllocation.toLocaleString()} USDC sent to your wallet.
                       </p>
                       {claimTxHash && (
                         <a
@@ -474,7 +586,7 @@ export function ReactorModal({
                           {myAllocation.toLocaleString()}
                         </p>
                         <p className="text-lg font-black mt-1" style={{ color: theme.color }}>
-                          $BLOBS
+                          USDC
                         </p>
                         <p className="text-slate-500 text-[10px] mt-2">
                           Based on your {myContribution.toLocaleString()} Cube contribution
@@ -500,7 +612,7 @@ export function ReactorModal({
                         ) : (
                           <>
                             <Gift className="w-5 h-5" />
-                            Claim {myAllocation.toLocaleString()} $BLOBS
+                            Claim {myAllocation.toLocaleString()} USDC
                           </>
                         )}
                       </button>

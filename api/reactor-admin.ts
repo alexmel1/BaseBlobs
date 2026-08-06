@@ -94,7 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const poolOnChain = await contract.eventTotalPool(eventId);
         if (poolOnChain > 0n) {
-          totalReward = Number(ethers.formatUnits(poolOnChain, 18));
+          totalReward = Number(ethers.formatUnits(poolOnChain, 6));
         }
       }
 

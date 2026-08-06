@@ -141,7 +141,7 @@ function getMerkleProofAndAllocation(treeJson: string, address: string): MerkleP
       if (leafAddr === targetAddr) {
         const allocWei = String(v[1]);
         const proof = loaded.getProof(i) as string[];
-        const allocTokens = Number(ethers.formatUnits(allocWei, 18));
+        const allocTokens = Number(ethers.formatUnits(allocWei, 6));
         return {
           found: true,
           proof,
@@ -466,7 +466,7 @@ export function useReactor(
     return base;
   }, [myContrib, rawWalletAddress, reactor?.merkleTreeDump, reactor?.eventId]);
 
-  // ── Claim $BLOBS Tokens ───────────────────────────────────────────────────────────
+  // ── Claim USDC Tokens ───────────────────────────────────────────────────────────
   const claimTokens = useCallback(async (): Promise<boolean> => {
     if (!rawWalletAddress || !reactor) return false;
     if (reactor.phase !== 'claimable') {

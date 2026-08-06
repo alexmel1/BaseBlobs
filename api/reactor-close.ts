@@ -67,7 +67,7 @@ export async function executeReactorClose(db: Firestore, force = false) {
 
   const totalReward = Number(stateData.totalReward || 0);
   const totalContributed = Number(stateData.totalContributed || 0);
-  const totalRewardWei = ethers.parseUnits(totalReward.toString(), 18);
+  const totalRewardWei = ethers.parseUnits(totalReward.toString(), 6);
 
   const currentEventId = Number(stateData.eventId || 0);
 
@@ -102,7 +102,7 @@ export async function executeReactorClose(db: Firestore, force = false) {
   for (const c of contribs) {
     const shareWei = (totalRewardWei * BigInt(c.contributed)) / sumContributedBig;
     const shareWeiStr = shareWei.toString();
-    const allocTokens = Number(ethers.formatUnits(shareWei, 18));
+    const allocTokens = Number(ethers.formatUnits(shareWei, 6));
 
     entries.push([c.addr, shareWeiStr]);
     allocationsList.push({
