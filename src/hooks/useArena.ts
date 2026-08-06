@@ -87,6 +87,7 @@ export function useArena({ walletAddress, syncId, onServerState }: UseArenaOpts)
       },
       (err) => {
         console.warn('Arena squad subscription failed:', err);
+        setError(`Arena subscription error: ${err.message || String(err)}`);
         setIsLoading(false);
       },
     );
@@ -176,6 +177,9 @@ export function useArena({ walletAddress, syncId, onServerState }: UseArenaOpts)
         const data = await res.json().catch(() => null);
         if (!res.ok || !data) {
           throw new Error(data?.error || 'Failed to register squad');
+        }
+        if (data.squad) {
+          setSquad(data.squad);
         }
         if (onServerStateRef.current) onServerStateRef.current(data);
         return true;

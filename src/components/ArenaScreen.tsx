@@ -19,6 +19,7 @@ import { P, ARENA_CONFIG, EVOLUTION_EMOJIS, getEvolutionStage, buildArenaFighter
 import type { Blob, ArenaSquad, ArenaMatchResult } from '../types';
 import type { ArenaMatchRecord, LeaderboardRow } from '../hooks/useArena';
 import { BlobCanvas } from './BlobCanvas';
+import { ArenaReplayModal } from './ArenaReplayModal';
 import { playTapSound } from '../utils/audio';
 
 interface ArenaScreenProps {
@@ -71,6 +72,7 @@ export function ArenaScreen(props: ArenaScreenProps) {
   const [tab, setTab] = useState<'squad' | 'leaderboard'>('squad');
   const [editing, setEditing] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
+  const [replayResult, setReplayResult] = useState<ArenaMatchResult | null>(null);
 
   const hasEnoughBlobs = blobs.length >= ARENA_CONFIG.squadSize;
 
@@ -97,7 +99,10 @@ export function ArenaScreen(props: ArenaScreenProps) {
 
   const handleFight = async () => {
     playTapSound();
-    await onFight();
+    const res = await onFight();
+    if (res) {
+      setReplayResult(res);
+    }
   };
 
   // ── Пустое состояние: блобов не хватает ──
@@ -269,7 +274,12 @@ export function ArenaScreen(props: ArenaScreenProps) {
             </button>
           </div>
 
-          {lastResult && <LastBattleCard result={lastResult} />}
+          {lastResult && (
+            <LastBattleCard
+              result={lastResult}
+              onReplay={(res) => setReplayResult(res)}
+            />
+          )}
 
           {matches.length > 0 && (
             <div className="mt-3">
@@ -296,12 +306,32 @@ export function ArenaScreen(props: ArenaScreenProps) {
                     >
                       {m.mmrDelta > 0 ? '+' : ''}{m.mmrDelta}
                     </span>
+                    {lastResult && lastResult.matchId === m.matchId && (
+                      <button
+                        onClick={() => {
+                          playTapSound();
+                          setReplayResult(lastResult);
+                        }}
+                        className="text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30 cursor-pointer ml-1"
+                        title="Replay battle"
+                      >
+                        ▶
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
         </>
+      )}
+
+      {replayResult && (
+        <ArenaReplayModal
+          squad={squad}
+          result={replayResult}
+          onClose={() => setReplayResult(null)}
+        />
       )}
     </div>
   );
@@ -495,7 +525,13 @@ function SquadEditor({
   );
 }
 
-function LastBattleCard({ result }: { result: ArenaMatchResult }) {
+function LastBattleCard({
+  result,
+  onReplay,
+}: {
+  result: ArenaMatchResult;
+  onReplay?: (res: ArenaMatchResult) => void;
+}) {
   return (
     <div
       className="mt-3 rounded-2xl border p-3.5"
@@ -511,9 +547,22 @@ function LastBattleCard({ result }: { result: ArenaMatchResult }) {
         >
           {result.playerWon ? 'Victory' : 'Defeat'} · {result.score}
         </span>
-        <span className="text-slate-400 text-[10px] font-mono truncate max-w-[140px]">
-          vs {result.isBot ? '⬡ ' : ''}{result.opponentName}
-        </span>
+        <div className="flex items-center gap-2">
+          {onReplay && (
+            <button
+              onClick={() => {
+                playTapSound();
+                onReplay(result);
+              }}
+              className="text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-500/30 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              ▶ Replay battle
+            </button>
+          )}
+          <span className="text-slate-400 text-[10px] font-mono truncate max-w-[120px]">
+            vs {result.isBot ? '⬡ ' : ''}{result.opponentName}
+          </span>
+        </div>
       </div>
 
       {/* Duel-by-duel breakdown */}

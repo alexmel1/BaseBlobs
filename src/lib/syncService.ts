@@ -71,7 +71,24 @@ export async function saveGameState(
       }
 
       const nextRev = cloudRev + 1;
-      const payload = { ...state, rev: nextRev, lastUpdated: Date.now() };
+      let payload: Record<string, any>;
+
+      if (!snap.exists()) {
+        // Initial creation of document for a new wallet save
+        payload = { ...state, rev: nextRev, lastUpdated: Date.now() };
+      } else {
+        // Document exists: update ONLY allowed client-side/cosmetic fields
+        // Economy and progression fields (cubes, energy, blobs, etc.) are modified only by the server via Admin SDK.
+        payload = {
+          rev: nextRev,
+          lastUpdated: Date.now(),
+        };
+        if (state.playerName !== undefined) payload.playerName = state.playerName;
+        if (state.selectedId !== undefined) payload.selectedId = state.selectedId;
+        if (state.expPickId !== undefined) payload.expPickId = state.expPickId;
+        if (state.expPickIds !== undefined) payload.expPickIds = state.expPickIds;
+      }
+
       tx.set(docRef, payload, { merge: true });
       return nextRev;
     });

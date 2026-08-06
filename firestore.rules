@@ -10,8 +10,19 @@ service cloud.firestore {
         request.resource.data.rev == 1 &&
         request.resource.data.cubes == 0;
 
-      // Все обновления экономики (кубы, блобы, экспедиции) заблокированы с клиента — только через /api/claim.ts (Admin SDK)
-      allow update: if false;
+      // Обновление с клиента разрешено ТОЛЬКО для клиентских/косметических полей (playerName, selectedId, expPickId, expPickIds)
+      // Все экономические и прогрессионные поля (cubes, blobs, energy, totalCubesAllTime, arenaSquadIds и т.д.) заблокированы.
+      // rev должен увеличиваться строго на 1 для работы оптимистичной блокировки.
+      allow update: if
+        request.resource.data.rev == resource.data.rev + 1 &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'playerName',
+          'selectedId',
+          'expPickId',
+          'expPickIds',
+          'lastUpdated',
+          'rev'
+        ]);
 
       allow delete: if false;
     }

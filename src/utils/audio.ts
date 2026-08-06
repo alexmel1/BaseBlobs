@@ -173,3 +173,39 @@ export function playLevelUpSound() {
   }
 }
 
+/**
+ * Play a punchy hit/impact sound for arena combat (with extra boom/pitch for critical hits)
+ */
+export function playHitSound(crit: boolean = false) {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc.type = crit ? 'sawtooth' : 'square';
+
+    if (crit) {
+      osc.frequency.setValueAtTime(450, now);
+      osc.frequency.exponentialRampToValueAtTime(80, now + 0.18);
+      gainNode.gain.setValueAtTime(0.25, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.start(now);
+      osc.stop(now + 0.24);
+    } else {
+      osc.frequency.setValueAtTime(280, now);
+      osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+      gainNode.gain.setValueAtTime(0.15, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.14);
+    }
+  } catch (error) {
+    // ignore
+  }
+}
+
