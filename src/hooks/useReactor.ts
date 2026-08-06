@@ -44,6 +44,13 @@ export interface MyContribution {
   eventId?: number;
 }
 
+export interface UnclaimedReward {
+  eventId: number;
+  allocationTokens: number;
+  allocationWei: string;
+  proof: string[];
+}
+
 // ─── Firestore Error Handling (as mandated by Skill) ─────────────────────────
 
 enum OperationType {
@@ -181,14 +188,8 @@ function parseContractError(e: any, fallbackMsg: string): string {
   if (code === 'ACTION_REJECTED' || code === 4001 || fullStr.includes('rejected') || fullStr.includes('denied') || fullStr.includes('UserRejected') || fullStr.includes('User denied')) {
     return 'Transaction was cancelled/rejected in your wallet.';
   }
-  if (fullStr.includes('Close current event first')) {
-    return 'Smart contract error: "Close current event first". An event is already active on the smart contract. Step 2 (Generate Merkle Root) must be submitted or the current claim window must expire before starting a new event.';
-  }
   if (fullStr.includes('Already synthesizing')) {
     return 'Smart contract error: "Already synthesizing". The event is already in the synthesizing phase on-chain.';
-  }
-  if (fullStr.includes('Claim window still open')) {
-    return 'Smart contract error: "Claim window still open". The claim window is currently open for players. The event can only be closed on-chain after the claim window expires.';
   }
   if (fullStr.includes('Must be synthesizing')) {
     return 'Smart contract error: "Must be synthesizing". You cannot close the event yet because it is not in the "Synthesizing" state. Please generate and submit the Merkle Root first.';
@@ -264,6 +265,8 @@ export function useReactor(
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimTxHash, setClaimTxHash] = useState<string | null>(null);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
+  const [unclaimedRewards, setUnclaimedRewards] = useState<UnclaimedReward[]>([]);
+  const [contributedEvents, setContributedEvents] = useState<number[]>([]);
 
   // Subscribe to global reactor state
   useEffect(() => {
@@ -312,23 +315,27 @@ export function useReactor(
         const data = snap.data();
         const dataEventId = data.eventId !== undefined ? Number(data.eventId) : null;
 
+        const eventsArr: number[] = Array.isArray(data.contributedEvents)
+          ? data.contributedEvents.map(Number)
+          : (dataEventId ? [dataEventId] : []);
+        setContributedEvents(eventsArr);
+
         // If the contribution belongs to an old event, treat as null/0
         if (reactor && dataEventId !== null && dataEventId !== reactor.eventId) {
           setMyContrib(null);
-          return;
+        } else {
+          const sanitized: MyContribution = {
+            walletAddress: String(data.walletAddress || rawWalletAddress),
+            contributed: Number(data.contributed || 0),
+            allocation: Number(data.allocation || 0),
+            allocationWei: String(data.allocationWei || '0'),
+            claimed: Boolean(data.claimed || false),
+            claimedAt: (data.claimedAt === 'null' || !data.claimedAt) ? null : Number(data.claimedAt),
+            eventId: dataEventId || undefined,
+          };
+          setMyContrib(sanitized);
+          saveLocalContrib(rawWalletAddress, sanitized);
         }
-
-        const sanitized: MyContribution = {
-          walletAddress: String(data.walletAddress || rawWalletAddress),
-          contributed: Number(data.contributed || 0),
-          allocation: Number(data.allocation || 0),
-          allocationWei: String(data.allocationWei || '0'),
-          claimed: Boolean(data.claimed || false),
-          claimedAt: (data.claimedAt === 'null' || !data.claimedAt) ? null : Number(data.claimedAt),
-          eventId: dataEventId || undefined,
-        };
-        setMyContrib(sanitized);
-        saveLocalContrib(rawWalletAddress, sanitized);
       } else {
         // Only set to null if we don't have a local cache that is ahead
         setMyContrib(prev => {
@@ -567,6 +574,109 @@ export function useReactor(
     }
   }, [rawWalletAddress, effectiveMyContrib, reactor, saveLocalContrib]);
 
+  // Check unclaimed rewards across past events in reactor_events_archive
+  useEffect(() => {
+    if (!rawWalletAddress || contributedEvents.length === 0) {
+      setUnclaimedRewards([]);
+      return;
+    }
+
+    let active = true;
+    const currentEvId = reactor?.eventId;
+
+    async function checkArchive() {
+      try {
+        const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+        const contract = new ethers.Contract(REACTOR_ADDRESS, BLOB_REACTOR_ABI, provider);
+
+        const foundRewards: UnclaimedReward[] = [];
+        const pastEvents = contributedEvents.filter((e) => e > 0 && e !== currentEvId);
+
+        for (const evId of pastEvents) {
+          if (!active) return;
+          try {
+            const hasClaimedOnChain: boolean = await contract.hasClaimed(evId, rawWalletAddress);
+            if (hasClaimedOnChain) continue;
+
+            const root: string = await contract.merkleRoots(evId);
+            if (!root || root === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+              continue;
+            }
+
+            const archiveRef = doc(db, 'reactor_events_archive', String(evId));
+            const archiveSnap = await getDoc(archiveRef);
+            if (!archiveSnap.exists()) continue;
+
+            const dump = archiveSnap.data()?.merkleTreeDump;
+            if (!dump) continue;
+
+            const proofRes = getMerkleProofAndAllocation(dump, rawWalletAddress);
+            if (proofRes.found && proofRes.allocationTokens > 0) {
+              foundRewards.push({
+                eventId: evId,
+                allocationTokens: proofRes.allocationTokens,
+                allocationWei: proofRes.allocationWei,
+                proof: proofRes.proof,
+              });
+            }
+          } catch (e) {
+            console.warn(`Error checking archive reward for season ${evId}:`, e);
+          }
+        }
+
+        if (active) {
+          setUnclaimedRewards(foundRewards);
+        }
+      } catch (err) {
+        console.warn('Archive check error:', err);
+      }
+    }
+
+    checkArchive();
+
+    return () => {
+      active = false;
+    };
+  }, [rawWalletAddress, contributedEvents, reactor?.eventId]);
+
+  const claimArchiveToken = useCallback(async (reward: UnclaimedReward): Promise<boolean> => {
+    if (!rawWalletAddress || !(window as any).ethereum) return false;
+    setIsClaiming(true);
+    setClaimError(null);
+    try {
+      const switched = await switchToBase();
+      if (!switched) {
+        setClaimError('Please switch your wallet network to Base L2');
+        return false;
+      }
+
+      const hash = await writeContract(wagmiConfig, {
+        address: REACTOR_ADDRESS as `0x${string}`,
+        abi: BLOB_REACTOR_ABI as any,
+        functionName: 'claim',
+        args: [BigInt(reward.eventId), BigInt(reward.allocationWei), reward.proof as `0x${string}`[]],
+        chain: base,
+        account: rawWalletAddress as `0x${string}`,
+      });
+      setClaimTxHash(hash);
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+
+      setUnclaimedRewards((prev) => prev.filter((r) => r.eventId !== reward.eventId));
+      return true;
+    } catch (e: any) {
+      if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+        setClaimError('Transaction rejected by user');
+      } else if (e.message?.includes('Already claimed')) {
+        setClaimError('Already claimed on-chain');
+      } else {
+        setClaimError(parseContractError(e, 'Failed to claim reward'));
+      }
+      return false;
+    } finally {
+      setIsClaiming(false);
+    }
+  }, [rawWalletAddress]);
+
   // ── Calculated Values ─────────────────────────────────────────────────────
   const progressPercent = reactor && reactor.target > 0
     ? Math.min(100, (reactor.totalContributed / reactor.target) * 100)
@@ -597,7 +707,9 @@ export function useReactor(
     claimError,
     claimTxHash,
     firestoreError,
+    unclaimedRewards,
     contribute,
     claimTokens,
+    claimArchiveToken,
   };
 }

@@ -165,6 +165,17 @@ export async function executeReactorClose(db: Firestore, force = false) {
 
   const claimWindowEnd = Date.now() + 7 * 86400 * 1000; // 7 days claim window
 
+  const archiveRef = db.collection('reactor_events_archive').doc(String(newEventId));
+  batch.set(archiveRef, {
+    eventId: newEventId,
+    merkleRoot,
+    merkleTreeDump,
+    totalReward,
+    totalContributed,
+    closedAt: Date.now(),
+    txHash,
+  });
+
   batch.update(globalRef, {
     phase: 'claimable',
     eventId: newEventId,

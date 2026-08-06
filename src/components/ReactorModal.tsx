@@ -5,11 +5,10 @@
 
 import React, { useState } from 'react';
 import {
-  Atom, Users, Coins, TrendingUp, Clock, Gift,
+  Atom, Users, Coins, TrendingUp, Gift,
   CheckCircle2, AlertTriangle, ExternalLink, Loader2, Wallet, Sparkles,
 } from 'lucide-react';
-import type { ReactorPhase } from '../hooks/useReactor';
-import { getSavedFirebaseConfig, saveFirebaseConfig, CustomFirebaseConfig } from '../lib/firebase';
+import type { ReactorPhase, UnclaimedReward } from '../hooks/useReactor';
 import { ReactorCoreCanvas } from './ReactorCoreCanvas';
 import { playTapSound } from '../utils/audio';
 
@@ -33,8 +32,10 @@ interface ReactorModalProps {
   claimTxHash: string | null;
   walletAddress: string | null;
   firestoreError?: string | null;
+  unclaimedRewards?: UnclaimedReward[];
   onContribute: (amount: number) => Promise<boolean>;
   onClaim: () => Promise<boolean>;
+  onClaimArchive?: (reward: UnclaimedReward) => Promise<boolean>;
 }
 
 function fmtCountdown(ms: number): string {
@@ -92,7 +93,7 @@ export function ReactorModal({
   progressPercent, synthesizingProgress, msUntilClaimEnd,
   myContribution, estimatedReward, myAllocation, myClaimed,
   cubes, isClaiming, claimError, claimTxHash,
-  walletAddress, firestoreError, onContribute, onClaim,
+  walletAddress, firestoreError, unclaimedRewards, onContribute, onClaim, onClaimArchive,
 }: ReactorModalProps) {
   const [customAmount, setCustomAmount] = useState('');
   const [contributing, setContributing] = useState(false);
@@ -100,70 +101,6 @@ export function ReactorModal({
   const [justClaimed, setJustClaimed] = useState(false);
   // Инкремент триггерит вспышку ядра на canvas
   const [flashKey, setFlashKey] = useState(0);
-
-  // Custom Firebase configuration states
-  const [showFirebaseSetup, setShowFirebaseSetup] = useState(false);
-  const [firebaseInput, setFirebaseInput] = useState('');
-  const [firebaseSetupError, setFirebaseSetupError] = useState<string | null>(null);
-  const [firebaseSetupSuccess, setFirebaseSetupSuccess] = useState<string | null>(null);
-
-  const hasCustomFirebase = !!getSavedFirebaseConfig();
-
-  const handleSaveFirebaseConfig = () => {
-    setFirebaseSetupError(null);
-    setFirebaseSetupSuccess(null);
-
-    if (!firebaseInput.trim()) {
-      setFirebaseSetupError('Please paste your Firebase configuration object or JSON first.');
-      return;
-    }
-
-    try {
-      let parsed: CustomFirebaseConfig | null = null;
-      try {
-        parsed = JSON.parse(firebaseInput.trim()) as CustomFirebaseConfig;
-      } catch {
-        // Try fuzzy parsing via regex for javascript objects copied from Firebase Console
-        const apiKeyMatch = firebaseInput.match(/apiKey:\s*["']([^"']+)["']/);
-        const authDomainMatch = firebaseInput.match(/authDomain:\s*["']([^"']+)["']/);
-        const projectIdMatch = firebaseInput.match(/projectId:\s*["']([^"']+)["']/);
-        const storageBucketMatch = firebaseInput.match(/storageBucket:\s*["']([^"']+)["']/);
-        const messagingSenderIdMatch = firebaseInput.match(/messagingSenderId:\s*["']([^"']+)["']/);
-        const appIdMatch = firebaseInput.match(/appId:\s*["']([^"']+)["']/);
-
-        if (apiKeyMatch && projectIdMatch && appIdMatch) {
-          parsed = {
-            apiKey: apiKeyMatch[1],
-            authDomain: authDomainMatch ? authDomainMatch[1] : `${projectIdMatch[1]}.firebaseapp.com`,
-            projectId: projectIdMatch[1],
-            storageBucket: storageBucketMatch ? storageBucketMatch[1] : `${projectIdMatch[1]}.firebasestorage.app`,
-            messagingSenderId: messagingSenderIdMatch ? messagingSenderIdMatch[1] : '',
-            appId: appIdMatch[1]
-          };
-        }
-      }
-
-      if (!parsed || !parsed.apiKey || !parsed.projectId || !parsed.appId) {
-        throw new Error('Could not extract required fields (apiKey, projectId, appId). Please check the format.');
-      }
-
-      saveFirebaseConfig(parsed);
-      setFirebaseSetupSuccess('Firebase configuration saved successfully! Reloading application...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
-    } catch (err: any) {
-      setFirebaseSetupError(err.message || 'Invalid format. Make sure to paste the full firebaseConfig object.');
-    }
-  };
-
-  const handleResetFirebaseConfig = () => {
-    saveFirebaseConfig(null);
-    setFirebaseSetupSuccess('Reset to default Firebase configuration. Reloading...');
-    setTimeout(() => {
-      window.location.reload();
-    }, 1500);
-  };
 
   const handleContribute = async (amount: number) => {
     if (!amount || amount <= 0 || amount > cubes || contributing) return;
@@ -317,6 +254,37 @@ export function ReactorModal({
                 </span>
               )}
             </div>
+
+            {/* Unclaimed Rewards Banner */}
+            {unclaimedRewards && unclaimedRewards.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {unclaimedRewards.map((reward) => (
+                  <div
+                    key={reward.eventId}
+                    className="bg-emerald-950/50 border border-emerald-500/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs shadow-lg"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Gift className="w-5 h-5 text-emerald-400 shrink-0" />
+                      <div>
+                        <p className="text-white font-bold leading-tight">
+                          У тебя есть незаклейменная награда за Season {reward.eventId} — {reward.allocationTokens} USDC
+                        </p>
+                        <p className="text-emerald-400/70 text-[10px] mt-0.5 font-mono">
+                          Available to claim on Base L2
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      disabled={isClaiming || !walletAddress}
+                      onClick={() => onClaimArchive && onClaimArchive(reward)}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs hover:bg-emerald-400 transition-colors shrink-0 disabled:opacity-50 cursor-pointer shadow-md font-mono"
+                    >
+                      Claim {reward.allocationTokens} USDC
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Firestore error warning */}
             {firestoreError && (
@@ -496,18 +464,6 @@ export function ReactorModal({
             {/* ── CLAIMABLE ── */}
             {phase === 'claimable' && (
               <div>
-                <div className="flex items-center justify-between bg-white/[0.04] border border-white/8 rounded-2xl p-3 mb-4">
-                  <div>
-                    <p className="text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5" /> Claim window closes in
-                    </p>
-                    <p className="text-white font-black text-xl font-mono mt-0.5">
-                      {fmtCountdown(msUntilClaimEnd)}
-                    </p>
-                  </div>
-                  <span className="text-3xl">⏰</span>
-                </div>
-
                 {myAllocation > 0 ? (
                   myClaimed || justClaimed ? (
                     <div className="text-center py-6">
@@ -603,50 +559,6 @@ export function ReactorModal({
                 <p className="text-slate-500 text-xs mt-1">The next event is being prepared.</p>
               </div>
             )}
-
-            {/* Footer: скрытые настройки Firebase */}
-            <div className="mt-5 pt-4 border-t border-white/5">
-              {showFirebaseSetup ? (
-                <div className="space-y-2">
-                  <textarea
-                    value={firebaseInput}
-                    onChange={(e) => setFirebaseInput(e.target.value)}
-                    placeholder="Paste firebaseConfig object"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl p-2 text-[11px] text-slate-300 font-mono outline-none focus:border-blue-500/40"
-                    rows={3}
-                  />
-                  {firebaseSetupError && (
-                    <p className="text-red-400 text-[11px]">{firebaseSetupError}</p>
-                  )}
-                  {firebaseSetupSuccess && (
-                    <p className="text-emerald-400 text-[11px]">{firebaseSetupSuccess}</p>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleSaveFirebaseConfig}
-                      className="flex-1 py-2 rounded-xl bg-blue-600/70 border border-blue-500/40 text-white text-xs font-bold cursor-pointer"
-                    >
-                      Save config
-                    </button>
-                    {hasCustomFirebase && (
-                      <button
-                        onClick={handleResetFirebaseConfig}
-                        className="px-3 py-2 rounded-xl border border-white/10 text-slate-400 text-xs cursor-pointer"
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowFirebaseSetup(true)}
-                  className="text-slate-600 text-[10px] hover:text-slate-400 transition-colors cursor-pointer"
-                >
-                  Advanced: Firebase config
-                </button>
-              )}
-            </div>
 
           </div>
     </div>

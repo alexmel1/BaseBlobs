@@ -714,6 +714,9 @@ async function claimReactorContribute(
       lastUpdated: now,
     });
 
+    const existingEvents: number[] = Array.isArray(existingContrib?.contributedEvents) ? existingContrib.contributedEvents : [];
+    const contributedEvents = existingEvents.includes(eventId) ? existingEvents : [...existingEvents, eventId];
+
     tx.set(
       contribRef,
       {
@@ -725,6 +728,7 @@ async function claimReactorContribute(
         claimed: isSameEvent ? existingContrib!.claimed ?? false : false,
         claimedAt: isSameEvent ? existingContrib!.claimedAt ?? null : null,
         eventId,
+        contributedEvents,
       },
       { merge: true }
     );

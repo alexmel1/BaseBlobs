@@ -6,9 +6,18 @@ service cloud.firestore {
       allow read: if true;
 
       // Первое создание нового сейва при начальной инициализации
+      // Разрешаем клиенту создавать документ ТОЛЬКО с косметическими полями.
+      // Экономика, блобы и энергия инициализируются и управляются исключительно сервером (Admin SDK).
       allow create: if
         request.resource.data.rev == 1 &&
-        request.resource.data.cubes <= 500;
+        request.resource.data.keys().hasOnly([
+          'playerName',
+          'selectedId',
+          'expPickId',
+          'expPickIds',
+          'lastUpdated',
+          'rev'
+        ]);
 
       // Обновление с клиента разрешено ТОЛЬКО для клиентских/косметических полей (playerName, selectedId, expPickId, expPickIds)
       // Все экономические и прогрессионные поля (cubes, blobs, energy, totalCubesAllTime, arenaSquadIds и т.д.) заблокированы.
@@ -76,6 +85,11 @@ service cloud.firestore {
     match /reactor_contributions/{docId} {
       allow read: if true;
       allow write: if false; // Пишется только через /api/claim.ts (Firebase Admin SDK)
+    }
+
+    match /reactor_events_archive/{docId} {
+      allow read: if true;
+      allow write: if false; // Архив сезонов реактора (только Admin SDK)
     }
   }
 }

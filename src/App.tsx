@@ -267,6 +267,33 @@ export default function App() {
   // Level Lore Modal State
   const [pendingLoreInfo, setPendingLoreInfo] = useState<LoreInfo | null>(null);
   const [loreInfo, setLoreInfo] = useState<LoreInfo | null>(null);
+  const [readLoreKeys, setReadLoreKeys] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('bb_read_lore_keys');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const markLoreAsRead = React.useCallback((blobId: string, level: number) => {
+    const key = `${blobId}_${level}`;
+    setReadLoreKeys((prev) => {
+      if (prev.includes(key)) return prev;
+      const next = [...prev, key];
+      try {
+        localStorage.setItem('bb_read_lore_keys', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // Mark lore as read whenever loreInfo modal is opened
+  useEffect(() => {
+    if (loreInfo) {
+      markLoreAsRead(loreInfo.blobId, loreInfo.level);
+    }
+  }, [loreInfo, markLoreAsRead]);
 
   // Trigger level up sound when modal is shown
   useEffect(() => {
@@ -1525,30 +1552,51 @@ export default function App() {
 
 
 
-              {/* Top-Left Lore Signal Button over the Main Blob Stage */}
-              {currentSelectedBlob && currentSelectedBlob.level >= 3 && (
-                <button
-                  onClick={() => {
-                    const unlockedMilestones = [3, 5, 8, 10, 20].filter((l) => currentSelectedBlob.level >= l);
-                    const highestMilestone = unlockedMilestones[unlockedMilestones.length - 1];
-                    if (highestMilestone && LEVEL_LORE[highestMilestone]) {
-                      const loreData = LEVEL_LORE[highestMilestone];
-                      setLoreInfo({
-                        blobId: currentSelectedBlob.id,
-                        personality: currentSelectedBlob.personality,
-                        level: highestMilestone,
-                        blobLevel: currentSelectedBlob.level,
-                        title: loreData.title,
-                        text: loreData.text,
-                      });
-                    }
-                  }}
-                  className="absolute top-3 left-3 z-20 w-8 h-8 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/40 text-amber-300 text-sm flex items-center justify-center backdrop-blur-md shadow-lg shadow-amber-500/10 active:scale-95 transition-all cursor-pointer"
-                  title="Lore Signal"
-                >
-                  📜
-                </button>
-              )}
+              {/* Top-Left Speech Bubble Button over the Main Blob Stage */}
+              {currentSelectedBlob && (() => {
+                const unlockedMilestones = [3, 5, 8, 10, 20].filter((l) => currentSelectedBlob.level >= l);
+                const highestMilestone = unlockedMilestones[unlockedMilestones.length - 1];
+                const isUnread = currentSelectedBlob.level >= 3 && highestMilestone
+                  ? !readLoreKeys.includes(`${currentSelectedBlob.id}_${highestMilestone}`)
+                  : false;
+
+                return (
+                  <button
+                    onClick={() => {
+                      if (highestMilestone && LEVEL_LORE[highestMilestone]) {
+                        const loreData = LEVEL_LORE[highestMilestone];
+                        markLoreAsRead(currentSelectedBlob.id, highestMilestone);
+                        setLoreInfo({
+                          blobId: currentSelectedBlob.id,
+                          personality: currentSelectedBlob.personality,
+                          level: highestMilestone,
+                          blobLevel: currentSelectedBlob.level,
+                          title: loreData.title,
+                          text: loreData.text,
+                        });
+                      } else {
+                        setLoreInfo({
+                          blobId: currentSelectedBlob.id,
+                          personality: currentSelectedBlob.personality,
+                          level: currentSelectedBlob.level,
+                          blobLevel: currentSelectedBlob.level,
+                          title: 'Network Transmission',
+                          text: 'Your Blob is humming quietly with network static. Reach Level 3 to intercept its first transmission!',
+                        });
+                      }
+                    }}
+                    className="absolute top-3 left-3 z-20 w-9 h-9 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-amber-400/40 text-base flex items-center justify-center backdrop-blur-md shadow-lg shadow-black/40 active:scale-95 transition-all cursor-pointer relative group"
+                    title={currentSelectedBlob.level >= 3 ? "Read Blob Transmission" : "Blob Status"}
+                  >
+                    <span>🗨️</span>
+                    {isUnread && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white font-black text-[10px] rounded-full flex items-center justify-center border-2 border-[#070e28] shadow-md animate-bounce">
+                        !
+                      </span>
+                    )}
+                  </button>
+                );
+              })()}
 
               {/* Preview Indicator */}
               {previewPersonality && (
@@ -2666,8 +2714,10 @@ export default function App() {
             claimTxHash={reactor.claimTxHash}
             walletAddress={rawWalletAddress}
             firestoreError={reactor.firestoreError}
+            unclaimedRewards={reactor.unclaimedRewards}
             onContribute={reactor.contribute}
             onClaim={reactor.claimTokens}
+            onClaimArchive={reactor.claimArchiveToken}
           />
         )}
       </main>

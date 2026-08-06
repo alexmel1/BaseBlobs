@@ -12,42 +12,7 @@ const DEFAULT_STORAGE_BUCKET = "gen-lang-client-0425514709.firebasestorage.app";
 const DEFAULT_MESSAGING_SENDER_ID = "672524116130";
 const DEFAULT_APP_ID = "1:672524116130:web:b2ca204c8302cde94af7fb";
 
-export interface CustomFirebaseConfig {
-  apiKey: string;
-  authDomain: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
-}
-
-export function getSavedFirebaseConfig(): CustomFirebaseConfig | null {
-  try {
-    const saved = localStorage.getItem('custom_firebase_config');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error('Failed to parse saved Firebase config:', e);
-  }
-  return null;
-}
-
-export function saveFirebaseConfig(config: CustomFirebaseConfig | null) {
-  try {
-    if (!config) {
-      localStorage.removeItem('custom_firebase_config');
-    } else {
-      localStorage.setItem('custom_firebase_config', JSON.stringify(config));
-    }
-  } catch (e) {
-    console.error('Failed to save Firebase config:', e);
-  }
-}
-
-const savedConfig = getSavedFirebaseConfig();
-
-const firebaseConfig = savedConfig || {
+const firebaseConfig = {
   apiKey: metaEnv.VITE_FIREBASE_API_KEY || DEFAULT_API_KEY,
   authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || DEFAULT_AUTH_DOMAIN,
   projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID,

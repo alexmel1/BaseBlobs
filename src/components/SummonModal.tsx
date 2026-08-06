@@ -231,7 +231,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-500">Contract:</span>{' '}
-                  <span className="text-blue-400 font-bold">0xBlobSummoner...</span>
+                  <span className="text-blue-400 font-bold">0xBlobRegistry...</span>
                 </div>
                 <div>
                   <span className="text-slate-500">Method:</span>{' '}
