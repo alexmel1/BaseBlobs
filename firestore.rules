@@ -8,12 +8,13 @@ service cloud.firestore {
       // Первое создание нового сейва при начальной инициализации
       allow create: if
         request.resource.data.rev == 1 &&
-        request.resource.data.cubes == 0;
+        request.resource.data.cubes <= 500;
 
       // Обновление с клиента разрешено ТОЛЬКО для клиентских/косметических полей (playerName, selectedId, expPickId, expPickIds)
       // Все экономические и прогрессионные поля (cubes, blobs, energy, totalCubesAllTime, arenaSquadIds и т.д.) заблокированы.
       // rev должен увеличиваться строго на 1 для работы оптимистичной блокировки.
       allow update: if
+        resource != null &&
         request.resource.data.rev == resource.data.rev + 1 &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'playerName',

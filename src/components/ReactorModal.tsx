@@ -261,50 +261,6 @@ export function ReactorModal({
             <span className="text-amber-400 text-base font-black">{cubes.toLocaleString()} 💠</span>
           </div>
         </div>
-
-        {/* Advanced Firebase setup drawer if needed */}
-        <div className="mt-auto pt-3 border-t border-white/5">
-          {showFirebaseSetup ? (
-            <div className="space-y-2">
-              <textarea
-                value={firebaseInput}
-                onChange={(e) => setFirebaseInput(e.target.value)}
-                placeholder="Paste firebaseConfig object"
-                className="w-full bg-white/5 border border-white/10 rounded-xl p-2 text-[11px] text-slate-300 font-mono outline-none focus:border-blue-500/40"
-                rows={3}
-              />
-              {firebaseSetupError && (
-                <p className="text-red-400 text-[11px]">{firebaseSetupError}</p>
-              )}
-              {firebaseSetupSuccess && (
-                <p className="text-emerald-400 text-[11px]">{firebaseSetupSuccess}</p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSaveFirebaseConfig}
-                  className="flex-1 py-2 rounded-xl bg-blue-600/70 border border-blue-500/40 text-white text-xs font-bold cursor-pointer"
-                >
-                  Save config
-                </button>
-                {hasCustomFirebase && (
-                  <button
-                    onClick={handleResetFirebaseConfig}
-                    className="px-3 py-2 rounded-xl border border-white/10 text-slate-400 text-xs cursor-pointer"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowFirebaseSetup(true)}
-              className="text-slate-600 text-[10px] hover:text-slate-400 transition-colors cursor-pointer"
-            >
-              Advanced: Firebase config
-            </button>
-          )}
-        </div>
       </div>
     );
   }

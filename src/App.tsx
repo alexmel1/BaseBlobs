@@ -427,15 +427,13 @@ export default function App() {
             triggerToast('Cloud save loaded! Progress synced.');
           }
         } else {
-          // New wallet save initialization with clean default state for this wallet
-          const freshState = getDefaultState();
-          const newRev = await saveWithRetry(syncId, freshState, 0);
-          freshState.rev = newRev;
+          // New wallet save initialization with clean default state created by server Admin SDK
+          if (rawWalletAddress) {
+            await checkServerStatus();
+          }
           if (isMounted) {
-            syncAndSetState(freshState);
-            revRef.current = newRev;
             setHasLoadedCloud(true);
-            triggerToast('Wallet save created in cloud.');
+            triggerToast('Wallet save synced with cloud.');
           }
         }
       } catch (e) {

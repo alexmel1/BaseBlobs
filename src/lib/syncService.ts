@@ -74,8 +74,17 @@ export async function saveGameState(
       let payload: Record<string, any>;
 
       if (!snap.exists()) {
-        // Initial creation of document for a new wallet save
-        payload = { ...state, rev: nextRev, lastUpdated: Date.now() };
+        // Initial creation of document for a new wallet save:
+        // Client writes cosmetic fields; server Admin SDK initializes full progression state on /api/status.
+        payload = {
+          playerName: state.playerName || 'Trainer',
+          selectedId: state.selectedId || 'b1',
+          expPickId: state.expPickId || 'b1',
+          expPickIds: state.expPickIds || ['b1'],
+          rev: nextRev,
+          lastUpdated: Date.now(),
+        };
+        tx.set(docRef, payload, { merge: true });
       } else {
         // Document exists: update ONLY allowed client-side/cosmetic fields
         // Economy and progression fields (cubes, energy, blobs, etc.) are modified only by the server via Admin SDK.
@@ -87,9 +96,8 @@ export async function saveGameState(
         if (state.selectedId !== undefined) payload.selectedId = state.selectedId;
         if (state.expPickId !== undefined) payload.expPickId = state.expPickId;
         if (state.expPickIds !== undefined) payload.expPickIds = state.expPickIds;
+        tx.set(docRef, payload, { merge: true });
       }
-
-      tx.set(docRef, payload, { merge: true });
       return nextRev;
     });
 

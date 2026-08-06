@@ -46,6 +46,76 @@ function getAdminDb(): Firestore {
   return db;
 }
 
+export function createDefaultSave(): Record<string, any> {
+  const initialBranches = rollBlobBranches();
+  return {
+    playerName: 'Trainer',
+    cubes: 200,
+    energy: 100,
+    energyMax: 100,
+    lastEnergyTime: Date.now(),
+    expeditionsToday: 0,
+    cubesCollectedToday: 0,
+    sendsToday: 0,
+    tapsToday: 0,
+    questDone: { exp: false, cubes: false, sends: false, taps: false },
+    questClaimed: { exp: false, cubes: false, sends: false, taps: false },
+    questsReset: Date.now(),
+    blobs: [
+      {
+        id: 'b1',
+        personality: 'happy',
+        level: 1,
+        xp: 0,
+        upgrades: {},
+        branches: initialBranches,
+        mood: { level: 2, lastFed: Date.now(), winsToday: 0, lossesToday: 0 },
+        trait: null,
+        isRadiant: false,
+        totalExpeditions: 0,
+        totalCubesEarned: 0,
+        nodesHeld: [],
+      },
+    ],
+    selectedId: 'b1',
+    expPickId: 'b1',
+    expPickIds: ['b1'],
+    nextId: 2,
+    activeExpedition: null,
+    activeExpeditions: [],
+    verifiedTxHashes: [],
+    blobCharms: 0,
+    lastExpeditionEvent: null,
+    lastFusionTime: 0,
+    totalCubesAllTime: 0,
+    totalExpeditionsAllTime: 0,
+    arenaRegisteredBlobId: null,
+    arenaSquadIds: [],
+    arenaBadges: [],
+    lastArenaProcessedWeek: null,
+    lastArenaRank: null,
+    lastArenaRewardClaimed: false,
+    hasOGBadge: false,
+    ogBadgePurchasedAt: null,
+    initialized: true,
+    rev: 1,
+    lastUpdated: Date.now(),
+  };
+}
+
+async function getOrCreateSaveState(
+  tx: FirebaseFirestore.Transaction,
+  saveRef: FirebaseFirestore.DocumentReference
+): Promise<{ state: Record<string, any>; isNew: boolean }> {
+  const snap = await tx.get(saveRef);
+  if (snap.exists) {
+    return { state: snap.data()!, isNew: false };
+  }
+  const initialState = createDefaultSave();
+  tx.set(saveRef, initialState);
+  return { state: initialState, isNew: true };
+}
+
 function rollExpeditionEvent(): typeof EXPEDITION_EVENTS[ExpeditionEventType] {
   const total = Object.values(EVENT_WEIGHTS).reduce((a, b) => a + b, 0);
   let roll = Math.random() * total;
@@ -101,10 +171,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (type === 'status' || type === 'sync' || type === 'get_state') {
       const saveRef = db.collection('saves').doc(syncId);
       const snap = await saveRef.get();
+      let state: Record<string, any>;
       if (!snap.exists) {
-        return res.status(200).json({ status: 'ok', state: null });
+        state = createDefaultSave();
+        await saveRef.set(state);
+      } else {
+        state = snap.data()!;
       }
-      let state = snap.data()!;
       const now = Date.now();
       const expeditions: any[] = state.activeExpeditions || (state.activeExpedition ? [state.activeExpedition] : []);
       const finishedExp = expeditions.find((e: any) => e && e.endTime && now >= e.endTime);
@@ -237,9 +310,7 @@ async function claimExpedition(db: Firestore, syncId: string, blobId: string) {
   const saveRef = db.collection('saves').doc(syncId);
 
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(saveRef);
-    if (!snap.exists) throw new Error('Save not found');
-    const state = snap.data()!;
+    const { state } = await getOrCreateSaveState(tx, saveRef);
 
     const now = Date.now();
     const minIntervalMs = 1000;
@@ -379,10 +450,15 @@ async function claimNode(db: Firestore, syncId: string, walletAddress: string, n
 
   return db.runTransaction(async (tx) => {
     const [saveSnap, nodeSnap] = await Promise.all([tx.get(saveRef), tx.get(nodeRef)]);
-    if (!saveSnap.exists) throw new Error('Save not found');
     if (!nodeSnap.exists) throw new Error('Node not found');
 
-    const state = saveSnap.data()!;
+    let state: Record<string, any>;
+    if (!saveSnap.exists) {
+      state = createDefaultSave();
+      tx.set(saveRef, state);
+    } else {
+      state = saveSnap.data()!;
+    }
     const node = nodeSnap.data()!;
 
     const now = Date.now();
@@ -472,9 +548,14 @@ async function claimAllNodes(db: Firestore, syncId: string, walletAddress: strin
       tx.get(saveRef),
       tx.get(myNodesQuery),
     ]);
-    if (!saveSnap.exists) throw new Error('Save not found');
 
-    const state = saveSnap.data()!;
+    let state: Record<string, any>;
+    if (!saveSnap.exists) {
+      state = createDefaultSave();
+      tx.set(saveRef, state);
+    } else {
+      state = saveSnap.data()!;
+    }
     const now = Date.now();
     const minIntervalMs = 1000;
     if (state.lastUpdated && now - state.lastUpdated < minIntervalMs) {
@@ -575,8 +656,13 @@ async function claimReactorContribute(
       tx.get(contribRef),
     ]);
 
-    if (!saveSnap.exists) throw new Error('Save not found');
-    const state = saveSnap.data()!;
+    let state: Record<string, any>;
+    if (!saveSnap.exists) {
+      state = createDefaultSave();
+      tx.set(saveRef, state);
+    } else {
+      state = saveSnap.data()!;
+    }
 
     const now = Date.now();
     const minIntervalMs = 1000;
@@ -812,9 +898,7 @@ async function claimSummon(db: Firestore, syncId: string) {
   const saveRef = db.collection('saves').doc(syncId);
 
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(saveRef);
-    if (!snap.exists) throw new Error('Save not found');
-    const state = snap.data()!;
+    const { state } = await getOrCreateSaveState(tx, saveRef);
 
     const now = Date.now();
     const minIntervalMs = 1000;
@@ -882,9 +966,7 @@ async function claimUnlockSpecies(db: Firestore, syncId: string, personality: Pe
   const saveRef = db.collection('saves').doc(syncId);
 
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(saveRef);
-    if (!snap.exists) throw new Error('Save not found');
-    const state = snap.data()!;
+    const { state } = await getOrCreateSaveState(tx, saveRef);
 
     const now = Date.now();
     const minIntervalMs = 1000;
@@ -953,9 +1035,7 @@ async function claimUpgradeBlob(
   const saveRef = db.collection('saves').doc(syncId);
 
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(saveRef);
-    if (!snap.exists) throw new Error('Save not found');
-    const state = snap.data()!;
+    const { state } = await getOrCreateSaveState(tx, saveRef);
 
     const now = Date.now();
     const minIntervalMs = 1000;
@@ -1034,9 +1114,7 @@ async function claimBuyEnergy(db: Firestore, syncId: string, amount: number, pri
   const saveRef = db.collection('saves').doc(syncId);
 
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(saveRef);
-    if (!snap.exists) throw new Error('Save not found');
-    const state = snap.data()!;
+    const { state } = await getOrCreateSaveState(tx, saveRef);
 
     const now = Date.now();
     const minIntervalMs = 1000;
@@ -1091,9 +1169,7 @@ async function claimStartExpedition(db: Firestore, syncId: string, zoneId: strin
   const saveRef = db.collection('saves').doc(syncId);
 
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(saveRef);
-    if (!snap.exists) throw new Error('Save not found');
-    const state = snap.data()!;
+    const { state } = await getOrCreateSaveState(tx, saveRef);
 
     const now = Date.now();
     const minIntervalMs = 1000;

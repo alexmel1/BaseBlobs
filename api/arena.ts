@@ -13,6 +13,7 @@
  */
 
 import { Firestore } from 'firebase-admin/firestore';
+import { createDefaultSave } from './claim.js';
 import {
   ARENA_CONFIG,
   buildArenaFighter,
@@ -111,8 +112,13 @@ export async function arenaRegister(
 
   return db.runTransaction(async (tx) => {
     const saveSnap = await tx.get(saveRef);
-    if (!saveSnap.exists) throw new Error('Save not found');
-    const state = saveSnap.data()!;
+    let state: Record<string, any>;
+    if (!saveSnap.exists) {
+      state = createDefaultSave();
+      tx.set(saveRef, state);
+    } else {
+      state = saveSnap.data()!;
+    }
 
     const now = Date.now();
     if (state.lastUpdated && now - state.lastUpdated < 1000) {
@@ -282,9 +288,13 @@ export async function arenaFight(
   return db.runTransaction(async (tx) => {
     const [squadSnap, saveSnap] = await Promise.all([tx.get(squadRef), tx.get(saveRef)]);
     if (!squadSnap.exists) throw new Error('Register a squad first');
-    if (!saveSnap.exists) throw new Error('Save not found');
-
-    const state = saveSnap.data()!;
+    let state: Record<string, any>;
+    if (!saveSnap.exists) {
+      state = createDefaultSave();
+      tx.set(saveRef, state);
+    } else {
+      state = saveSnap.data()!;
+    }
     if (state.lastUpdated && now - state.lastUpdated < 1000) {
       throw new Error('Too many requests, slow down');
     }
