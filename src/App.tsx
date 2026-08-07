@@ -1270,26 +1270,6 @@ export default function App() {
     }
   };
 
-  // ── Push Notification Permission Handler ──
-  const handleRequestNotificationPermission = () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          triggerToast("🔔 Notifications enabled! You'll receive alerts when expeditions finish.");
-          try {
-            new Notification("BaseBlobs Notifications Active! 🔔", {
-              body: "We will notify you when your expeditions finish.",
-            });
-          } catch (e) {
-            console.warn(e);
-          }
-        } else {
-          triggerToast("❌ Notification permission was not granted.");
-        }
-      });
-    }
-  };
-
   // Calculated: Sleepy regeneration modifier
   const hasSleepy = state.blobs.some((b) => b.personality === 'sleepy');
   const energyRegenInterval = hasSleepy ? EREGEN * 0.7 : EREGEN;
@@ -2072,28 +2052,6 @@ export default function App() {
                 </p>
               </div>
             </div>
-
-            {/* Notification Permission Banner */}
-            {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
-              <div className="mb-4 p-3.5 bg-gradient-to-r from-purple-950/50 via-indigo-950/40 to-purple-950/50 border border-purple-500/35 rounded-2xl flex items-center justify-between gap-3 shadow-xl relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-purple-500/5 pointer-events-none" />
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-center text-lg animate-bounce">
-                    🔔
-                  </div>
-                  <div className="leading-tight">
-                    <h4 className="text-white text-[11px] font-black uppercase tracking-wider">Enable Expedition Alerts</h4>
-                    <p className="text-slate-400 text-[9px] mt-0.5">Get instant push notifications when expeditions finish!</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleRequestNotificationPermission}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-[10px] font-black tracking-wider uppercase rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-md shadow-purple-600/20 border border-purple-400/20"
-                >
-                  Enable 🔔
-                </button>
-              </div>
-            )}
 
             {/* Active Expeditions List widget */}
             {state.activeExpeditions && state.activeExpeditions.length > 0 ? (

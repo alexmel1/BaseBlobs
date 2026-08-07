@@ -44,7 +44,7 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
               <h3>Summoning New Blobs</h3>
             </div>
             <p className="text-slate-300">
-              Each new Blob is compiled via the Base L2 Factory for a Cube fee. The fee scales up with every Blob you already own — your collection has a maximum capacity of <strong className="text-white">10 Blobs</strong>.
+              Each new Blob is compiled via the Base L2 Factory — either for a Cube fee, or instantly for 0.20 USDC paid directly on-chain. Both paths share the same collection cap of 10 Blobs — once you hit it, neither option is available until the cap changes.
             </p>
 
             {/* Price Table */}
@@ -241,6 +241,17 @@ export function FaqModal({ isOpen, onClose }: FaqModalProps) {
                 <span className="font-bold text-amber-400 font-mono">Cooldown:</span> <span className="text-slate-300">Every attack attempt (win or lose) triggers a short cooldown on that node before it can be hit again — no back-to-back spam attacks.</span>
               </div>
             </div>
+          </div>
+
+          {/* Section 6b: Arena */}
+          <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <span className="text-base">⚔️</span>
+              <h3>Arena</h3>
+            </div>
+            <p className="text-slate-300">
+              Register a 3-Blob squad and fight up to 5 battles a day against other players' squads (or a bot opponent if no one else is queued). Combat is resolved slot-by-slot using each Blob's POWER, Vigor, Guard and Ferocity — the same stats that decide Node fights. Win or lose, you can watch a full replay of the battle afterward. Ranking is MMR-based, starting at 1000 with a short calibration period for new squads.
+            </p>
           </div>
 
           {/* Section 7: The Reactor */}
