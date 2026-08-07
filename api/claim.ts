@@ -24,6 +24,8 @@ import {
   EREGEN,
 } from '../src/data.js';
 import type { ExpeditionEventType, PersonalityType, UpgradeBranchId } from '../src/types.js';
+import { ethers } from 'ethers';
+import { USDC_ADDRESS, TREASURY_ADDRESS, SUMMON_USDC_PRICE, BASE_RPC } from '../src/contracts/reactorConfig.js';
 
 function getAdminDb(): Firestore {
   const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -252,6 +254,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (type === 'summon') {
       const updatedState = await claimSummon(db, syncId);
+      return res.status(200).json(updatedState);
+    }
+
+    if (type === 'summon_paid') {
+      const { txHash } = req.body || {};
+      if (!txHash) {
+        return res.status(400).json({ error: 'Missing txHash' });
+      }
+      const updatedState = await claimSummonPaid(db, syncId, walletAddress, txHash);
       return res.status(200).json(updatedState);
     }
 
@@ -898,6 +909,30 @@ async function claimAttackNode(
   });
 }
 
+function createNewBlob(state: any, now: number) {
+  const rolledPersonality = PKEYS[Math.floor(Math.random() * PKEYS.length)];
+  const nextIdNum = Number(state.nextId || ((state.blobs || []).length + 1));
+  const newBlobId = `b${nextIdNum}`;
+
+  const newBlob = {
+    id: newBlobId,
+    personality: rolledPersonality,
+    level: 1,
+    xp: 0,
+    upgrades: {},
+    // Набор веток роллится ТОЛЬКО на сервере и сохраняется вместе с блобом
+    branches: rollBlobBranches(),
+    mood: { level: 3, lastFed: now, winsToday: 0, lossesToday: 0 },
+    trait: null,
+    isRadiant: false,
+    totalExpeditions: 0,
+    totalCubesEarned: 0,
+    nodesHeld: [],
+  };
+
+  return { newBlob, rolledPersonality, nextIdNum, newBlobId };
+}
+
 async function claimSummon(db: Firestore, syncId: string) {
   const saveRef = db.collection('saves').doc(syncId);
 
@@ -922,25 +957,7 @@ async function claimSummon(db: Firestore, syncId: string) {
       throw new Error(`Need ${SUMMON_COST} 💠 Cubes to summon!`);
     }
 
-    const rolledPersonality = PKEYS[Math.floor(Math.random() * PKEYS.length)];
-    const nextIdNum = Number(state.nextId || ((state.blobs || []).length + 1));
-    const newBlobId = `b${nextIdNum}`;
-
-    const newBlob = {
-      id: newBlobId,
-      personality: rolledPersonality,
-      level: 1,
-      xp: 0,
-      upgrades: {},
-      // Набор веток роллится ТОЛЬКО на сервере и сохраняется вместе с блобом
-      branches: rollBlobBranches(),
-      mood: { level: 3, lastFed: now, winsToday: 0, lossesToday: 0 },
-      trait: null,
-      isRadiant: false,
-      totalExpeditions: 0,
-      totalCubesEarned: 0,
-      nodesHeld: [],
-    };
+    const { newBlob, rolledPersonality, nextIdNum, newBlobId } = createNewBlob(state, now);
 
     const newCubes = currentCubes - SUMMON_COST;
     const newBlobs = [...(state.blobs || []), newBlob];
@@ -955,6 +972,109 @@ async function claimSummon(db: Firestore, syncId: string) {
       lastUpdated: now,
     };
 
+    tx.update(saveRef, updatePayload);
+
+    return {
+      ...state,
+      ...updatePayload,
+      newBlob,
+      randomPersonality: rolledPersonality,
+    };
+  });
+}
+
+async function claimSummonPaid(db: Firestore, syncId: string, walletAddress: string, txHash: string) {
+  if (!txHash || typeof txHash !== 'string' || !/^0x[a-fA-F0-9]{64}$/.test(txHash.trim())) {
+    throw new Error('Invalid transaction hash format');
+  }
+
+  const cleanTxHash = txHash.trim().toLowerCase();
+
+  // 1. Предварительная проверка неиспользования хэша
+  const txUsedRef = db.collection('summon_tx_used').doc(cleanTxHash);
+  const usedSnapPre = await txUsedRef.get();
+  if (usedSnapPre.exists) {
+    throw new Error('Transaction already used');
+  }
+
+  // 2. Он-чейн верификация транзакции в блокчейне Base
+  const provider = new ethers.JsonRpcProvider(BASE_RPC);
+  const receipt = await provider.getTransactionReceipt(cleanTxHash);
+
+  if (!receipt || receipt.status !== 1 || receipt.blockNumber == null) {
+    throw new Error('Transaction not found or failed on-chain');
+  }
+
+  const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+  const usdcAddressLower = USDC_ADDRESS.toLowerCase();
+  const treasuryAddressLower = TREASURY_ADDRESS.toLowerCase();
+  const walletAddressLower = walletAddress.toLowerCase();
+
+  let validPayment = false;
+  for (const log of receipt.logs || []) {
+    if (log.address.toLowerCase() !== usdcAddressLower) continue;
+    if (!log.topics || log.topics.length < 3) continue;
+    if (log.topics[0].toLowerCase() !== TRANSFER_TOPIC) continue;
+
+    const fromAddr = '0x' + log.topics[1].slice(-40).toLowerCase();
+    const toAddr = '0x' + log.topics[2].slice(-40).toLowerCase();
+    let value: bigint;
+    try {
+      value = BigInt(log.data);
+    } catch {
+      continue;
+    }
+
+    if (
+      fromAddr === walletAddressLower &&
+      toAddr === treasuryAddressLower &&
+      value === BigInt(SUMMON_USDC_PRICE)
+    ) {
+      validPayment = true;
+      break;
+    }
+  }
+
+  if (!validPayment) {
+    throw new Error('Invalid payment: expected 0.20 USDC transfer to treasury');
+  }
+
+  const saveRef = db.collection('saves').doc(syncId);
+
+  return db.runTransaction(async (tx) => {
+    const usedSnap = await tx.get(txUsedRef);
+    if (usedSnap.exists) {
+      throw new Error('Transaction already used');
+    }
+
+    const { state } = await getOrCreateSaveState(tx, saveRef);
+
+    const now = Date.now();
+    const minIntervalMs = 1000;
+    if (state.lastUpdated && now - state.lastUpdated < minIntervalMs) {
+      throw new Error('Too many requests, slow down');
+    }
+
+    const MAX_BLOBS = 10;
+    const currentBlobCount = (state.blobs || []).length;
+    if (currentBlobCount >= MAX_BLOBS) {
+      throw new Error(`You already have the maximum of ${MAX_BLOBS} Blobs!`);
+    }
+
+    const { newBlob, rolledPersonality, nextIdNum, newBlobId } = createNewBlob(state, now);
+
+    const newBlobs = [...(state.blobs || []), newBlob];
+    const newRev = (state.rev || 0) + 1;
+
+    const updatePayload = {
+      blobs: newBlobs,
+      nextId: nextIdNum + 1,
+      selectedId: newBlobId,
+      rev: newRev,
+      lastUpdated: now,
+    };
+
+    tx.set(txUsedRef, { walletAddress, usedAt: now });
     tx.update(saveRef, updatePayload);
 
     return {

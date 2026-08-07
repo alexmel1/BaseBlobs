@@ -91,5 +91,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false; // Архив сезонов реактора (только Admin SDK)
     }
+
+    match /summon_tx_used/{docId} {
+      allow read: if false;
+      allow write: if false; // Защита от повторного использования txHash призывов за USDC
+    }
   }
 }

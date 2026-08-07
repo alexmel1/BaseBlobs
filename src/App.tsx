@@ -941,11 +941,6 @@ export default function App() {
       triggerToast('You already have the maximum of 10 Blobs!');
       return;
     }
-    const cost = 1500 + blobCount * 500;
-    if (state.cubes < cost) {
-      triggerToast(`Need ${cost} 💠 to Summon!`);
-      return;
-    }
     setIsSummonModalOpen(true);
   };
 
@@ -986,6 +981,41 @@ export default function App() {
     } catch (err: any) {
       console.error('Summon error:', err);
       throw err; // пусть SummonModal сам покажет реальный текст ошибки
+    }
+  };
+
+  // Action: Execute paid USDC summoning
+  const handleExecuteSummonPaid = async (txHash: string): Promise<PersonalityType | null> => {
+    const blobCount = (state.blobs || []).length;
+    if (blobCount >= 10) {
+      triggerToast('You already have the maximum of 10 Blobs!');
+      return null;
+    }
+    if (!rawWalletAddress || !syncId) {
+      triggerToast('Connect wallet to summon!');
+      return null;
+    }
+
+    try {
+      const res = await fetchWithSession('/api/claim', {
+        type: 'summon_paid',
+        syncId,
+        walletAddress: rawWalletAddress,
+        txHash,
+      });
+
+      const updated = await res.json();
+      if (res.ok && updated) {
+        const validated = validateAndMigrateState(updated);
+        syncAndSetState(validated);
+        setRevealBranches(updated.newBlob ? getBlobBranches(updated.newBlob) : null);
+        return updated.randomPersonality || updated.newBlob?.personality || null;
+      } else {
+        throw new Error(updated.error || 'Server error');
+      }
+    } catch (err: any) {
+      console.error('Paid summon error:', err);
+      throw err;
     }
   };
 
@@ -1552,71 +1582,54 @@ export default function App() {
 
 
 
-              {/* Top-Left Speech Bubble Button over the Main Blob Stage */}
-              {currentSelectedBlob && (() => {
-                const unlockedMilestones = [3, 5, 8, 10, 20].filter((l) => currentSelectedBlob.level >= l);
-                const highestMilestone = unlockedMilestones[unlockedMilestones.length - 1];
-                const isUnread = currentSelectedBlob.level >= 3 && highestMilestone
-                  ? !readLoreKeys.includes(`${currentSelectedBlob.id}_${highestMilestone}`)
-                  : false;
-
-                return (
-                  <button
-                    onClick={() => {
-                      if (highestMilestone && LEVEL_LORE[highestMilestone]) {
-                        const loreData = LEVEL_LORE[highestMilestone];
-                        markLoreAsRead(currentSelectedBlob.id, highestMilestone);
-                        setLoreInfo({
-                          blobId: currentSelectedBlob.id,
-                          personality: currentSelectedBlob.personality,
-                          level: highestMilestone,
-                          blobLevel: currentSelectedBlob.level,
-                          title: loreData.title,
-                          text: loreData.text,
-                        });
-                      } else {
-                        setLoreInfo({
-                          blobId: currentSelectedBlob.id,
-                          personality: currentSelectedBlob.personality,
-                          level: currentSelectedBlob.level,
-                          blobLevel: currentSelectedBlob.level,
-                          title: 'Network Transmission',
-                          text: 'Your Blob is humming quietly with network static. Reach Level 3 to intercept its first transmission!',
-                        });
-                      }
-                    }}
-                    className="absolute top-3 left-3 z-20 w-9 h-9 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-amber-400/40 text-base flex items-center justify-center backdrop-blur-md shadow-lg shadow-black/40 active:scale-95 transition-all cursor-pointer relative group"
-                    title={currentSelectedBlob.level >= 3 ? "Read Blob Transmission" : "Blob Status"}
-                  >
-                    <span>🗨️</span>
-                    {isUnread && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white font-black text-[10px] rounded-full flex items-center justify-center border-2 border-[#070e28] shadow-md animate-bounce">
-                        !
-                      </span>
-                    )}
-                  </button>
-                );
-              })()}
-
-              {/* Preview Indicator */}
-              {previewPersonality && (
-                <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-black text-[9px] font-black tracking-wider px-3 py-1 rounded-full z-20 flex items-center gap-1.5 animate-bounce shadow-lg shadow-amber-500/10">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-black"></span>
-                  </span>
-                  <span>PREVIEW: {P[previewPersonality].name.toUpperCase()}</span>
-                  <button
-                    onClick={() => setPreviewPersonality(null)}
-                    className="ml-1 bg-black/20 hover:bg-black/30 text-black px-1.5 py-0.5 rounded font-extrabold text-[8px] cursor-pointer"
-                  >
-                    Exit
-                  </button>
-                </div>
-              )}
-              
               {/* Blob Stage */}
               <div className="relative z-10">
+                {/* Speech Bubble Button directly beside the Blob */}
+                {currentSelectedBlob && (() => {
+                  const unlockedMilestones = [3, 5, 8, 10, 20].filter((l) => currentSelectedBlob.level >= l);
+                  const highestMilestone = unlockedMilestones[unlockedMilestones.length - 1];
+                  const isUnread = currentSelectedBlob.level >= 3 && highestMilestone
+                    ? !readLoreKeys.includes(`${currentSelectedBlob.id}_${highestMilestone}`)
+                    : false;
+
+                  return (
+                    <button
+                      onClick={() => {
+                        if (highestMilestone && LEVEL_LORE[highestMilestone]) {
+                          const loreData = LEVEL_LORE[highestMilestone];
+                          markLoreAsRead(currentSelectedBlob.id, highestMilestone);
+                          setLoreInfo({
+                            blobId: currentSelectedBlob.id,
+                            personality: currentSelectedBlob.personality,
+                            level: highestMilestone,
+                            blobLevel: currentSelectedBlob.level,
+                            title: loreData.title,
+                            text: loreData.text,
+                          });
+                        } else {
+                          setLoreInfo({
+                            blobId: currentSelectedBlob.id,
+                            personality: currentSelectedBlob.personality,
+                            level: currentSelectedBlob.level,
+                            blobLevel: currentSelectedBlob.level,
+                            title: 'Network Transmission',
+                            text: 'Your Blob is humming quietly with network static. Reach Level 3 to intercept its first transmission!',
+                          });
+                        }
+                      }}
+                      className="absolute top-6 -left-6 z-20 w-9 h-9 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 border border-amber-400/40 text-base flex items-center justify-center backdrop-blur-md shadow-lg shadow-black/40 active:scale-95 transition-all cursor-pointer group"
+                      title={currentSelectedBlob.level >= 3 ? "Read Blob Transmission" : "Blob Status"}
+                    >
+                      <span>🗨️</span>
+                      {isUnread && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white font-black text-[10px] rounded-full flex items-center justify-center border-2 border-[#070e28] shadow-md animate-bounce">
+                          !
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
+
                 {previewPersonality ? (
                   <BlobCanvas
                     personality={previewPersonality}
@@ -2929,6 +2942,7 @@ export default function App() {
           setRevealBranches(null);
         }}
         onConfirmSummon={handleExecuteSummon}
+        onConfirmSummonPaid={handleExecuteSummonPaid}
         cubes={state.cubes}
         currentBlobCount={(state.blobs || []).length}
         directRevealPersonality={directRevealPersonality}

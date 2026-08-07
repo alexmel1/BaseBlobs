@@ -5,16 +5,64 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, X, Atom, Loader2, Code, Database } from 'lucide-react';
+import { Sparkles, X, Atom, Loader2, Code, Database, Coins } from 'lucide-react';
+import { writeContract, waitForTransactionReceipt } from 'wagmi/actions';
+import { base } from '@reown/appkit/networks';
+import { wagmiConfig } from '../lib/web3Config';
+import { TREASURY_ADDRESS, SUMMON_USDC_PRICE, USDC_ADDRESS } from '../contracts/reactorConfig';
 import { P, UPGRADES } from '../data';
 import { PersonalityType, UpgradeBranchId } from '../types';
 import { playTapSound } from '../utils/audio';
 import { BlobCanvas } from './BlobCanvas';
 
+async function switchToBase(): Promise<boolean> {
+  if (typeof window === 'undefined' || !(window as any).ethereum) return false;
+  try {
+    await (window as any).ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x2105' }],
+    });
+    return true;
+  } catch (e: any) {
+    if (e.code === 4902) {
+      try {
+        await (window as any).ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x2105',
+            chainName: 'Base',
+            rpcUrls: ['https://mainnet.base.org'],
+            nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+            blockExplorerUrls: ['https://basescan.org'],
+          }],
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
+const ERC20_TRANSFER_ABI = [
+  {
+    name: 'transfer',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
 interface SummonModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirmSummon: () => PersonalityType | null | Promise<PersonalityType | null>;
+  onConfirmSummonPaid?: (txHash: string) => PersonalityType | null | Promise<PersonalityType | null>;
   cubes: number;
   currentBlobCount?: number;
   directRevealPersonality?: PersonalityType | null;
@@ -29,6 +77,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
   isOpen,
   onClose,
   onConfirmSummon,
+  onConfirmSummonPaid,
   cubes,
   currentBlobCount = 0,
   directRevealPersonality,
@@ -39,6 +88,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
 }) => {
   const [stage, setStage] = useState<'prepare' | 'signing' | 'reveal'>('prepare');
   const [isSummoning, setIsSummoning] = useState(false);
+  const [summonMethod, setSummonMethod] = useState<'cubes' | 'usdc' | null>(null);
   const [rolledPersonality, setRolledPersonality] = useState<PersonalityType | null>(null);
   const [summonError, setSummonError] = useState<string | null>(null);
 
@@ -57,6 +107,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
       }
       setSummonError(null);
       setIsSummoning(false);
+      setSummonMethod(null);
     }
   }, [isOpen, directRevealPersonality]);
 
@@ -68,6 +119,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
     if (cubes < summonCost || isSummoning) return;
     setIsSummoning(true);
     setSummonError(null);
+    setSummonMethod('cubes');
     playTapSound();
     setStage('signing');
 
@@ -84,6 +136,65 @@ export const SummonModal: React.FC<SummonModalProps> = ({
       console.error('Summoning failed:', err);
       if (triggerToast) triggerToast(err.message || 'Summoning failed.');
       setSummonError(err.message || 'Summoning failed');
+      setStage('prepare');
+    } finally {
+      setIsSummoning(false);
+    }
+  };
+
+  const handleInitiateSummonPaid = async () => {
+    if (isMaxBlobs) {
+      setSummonError(`You already have the maximum of ${MAX_BLOBS} Blobs!`);
+      return;
+    }
+    if (!rawWalletAddress) {
+      setSummonError('Connect Web3 wallet to summon with USDC!');
+      return;
+    }
+    if (isSummoning) return;
+    setIsSummoning(true);
+    setSummonError(null);
+    setSummonMethod('usdc');
+    playTapSound();
+    setStage('signing');
+
+    try {
+      const switched = await switchToBase();
+      if (!switched) {
+        throw new Error('Please switch your wallet network to Base L2');
+      }
+
+      const hash = await writeContract(wagmiConfig, {
+        address: USDC_ADDRESS as `0x${string}`,
+        abi: ERC20_TRANSFER_ABI,
+        functionName: 'transfer',
+        args: [TREASURY_ADDRESS as `0x${string}`, BigInt(SUMMON_USDC_PRICE)],
+        chain: base,
+        account: rawWalletAddress as `0x${string}`,
+      });
+
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+
+      if (!onConfirmSummonPaid) {
+        throw new Error('Paid summon handler is not configured');
+      }
+
+      const personalityResult = await onConfirmSummonPaid(hash);
+      if (personalityResult) {
+        setRolledPersonality(personalityResult);
+        setStage('reveal');
+      } else {
+        setSummonError('Server returned no blob data after payment');
+        setStage('prepare');
+      }
+    } catch (err: any) {
+      console.error('Paid summoning failed:', err);
+      let msg = err.message || 'Payment or summoning failed';
+      if (err.code === 4001 || err.code === 'ACTION_REJECTED' || (typeof msg === 'string' && (msg.includes('rejected') || msg.includes('denied')))) {
+        msg = 'Transaction was cancelled/rejected in your wallet.';
+      }
+      if (triggerToast) triggerToast(msg);
+      setSummonError(msg);
       setStage('prepare');
     } finally {
       setIsSummoning(false);
@@ -122,14 +233,14 @@ export const SummonModal: React.FC<SummonModalProps> = ({
             </button>
           )}
 
-          {/* STAGE 1: PREPARE (Before spending cubes, with CANCEL option) */}
+          {/* STAGE 1: PREPARE */}
           {stage === 'prepare' && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="flex flex-col items-center"
             >
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#0052ff]/10 border border-[#0052ff]/30 rounded-full text-[#00cfff] text-[10px] font-black uppercase tracking-wider mb-4 font-mono">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#0052ff]/10 border border-[#0052ff]/30 rounded-full text-[#00cfff] text-[10px] font-black uppercase tracking-wider mb-3 font-mono">
                 <Database className="w-3 h-3 text-[#00cfff]" />
                 <span>Base L2 Factory</span>
               </div>
@@ -137,8 +248,8 @@ export const SummonModal: React.FC<SummonModalProps> = ({
               <h3 className="text-white text-base font-black tracking-wide font-display">
                 Summon New Blob
               </h3>
-              <p className="text-slate-400 text-[11px] mt-1.5 font-semibold font-mono max-w-[240px] leading-relaxed">
-                Compile a randomized companion Blob NFT directly via Web3 smart contract.
+              <p className="text-slate-400 text-[11px] mt-1 font-semibold font-mono max-w-[240px] leading-relaxed">
+                Compile a randomized companion Blob directly via Web3 smart contract or USDC payment.
               </p>
 
               {summonError && (
@@ -149,7 +260,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
                       onClick={() => setSummonError(null)}
                       className="text-red-400 hover:text-white transition-colors cursor-pointer text-xs font-bold px-1"
                     >
-                      Закрыть
+                      Close
                     </button>
                   </div>
                   <div className="break-words leading-snug">{summonError}</div>
@@ -157,27 +268,42 @@ export const SummonModal: React.FC<SummonModalProps> = ({
               )}
 
               {/* Holographic Spinning Blueprint Core */}
-              <div className="relative h-44 flex items-center justify-center my-2">
-                <div className="relative w-28 h-28 flex items-center justify-center">
+              <div className="relative h-36 flex items-center justify-center my-1">
+                <div className="relative w-24 h-24 flex items-center justify-center">
                   <div className="absolute inset-0 border border-dashed border-[#00cfff]/35 rounded-full animate-spin-slow" />
                   <div className="absolute inset-2 border border-dotted border-[#0052ff]/40 rounded-full animate-pulse" />
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#0052ff]/20 via-[#00cfff]/10 to-transparent border border-[#00cfff]/30 flex items-center justify-center shadow-lg shadow-[#00cfff]/5">
-                    <Atom className="w-7 h-7 text-[#00cfff] animate-spin-slow" />
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#0052ff]/20 via-[#00cfff]/10 to-transparent border border-[#00cfff]/30 flex items-center justify-center shadow-lg shadow-[#00cfff]/5">
+                    <Atom className="w-6 h-6 text-[#00cfff] animate-spin-slow" />
                   </div>
                 </div>
               </div>
 
-              {/* Price card */}
-              <div className="w-full bg-slate-900/60 border border-white/5 rounded-2xl p-3.5 mb-5">
-                <div className="text-slate-500 text-[9px] font-black uppercase tracking-wider mb-1 font-mono">
-                  {isMaxBlobs ? 'Limit Reached' : 'Consensus Price'}
+              {/* Price card options */}
+              <div className="w-full grid grid-cols-2 gap-2 mb-4">
+                {/* Cubes Option */}
+                <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-2.5 flex flex-col items-center">
+                  <span className="text-slate-500 text-[9px] font-black uppercase tracking-wider mb-0.5 font-mono">
+                    In-Game Cubes
+                  </span>
+                  <span className="text-white text-sm font-black font-mono flex items-center gap-1">
+                    {isMaxBlobs ? 'MAX (10/10)' : `${summonCost} 💠`}
+                  </span>
+                  <span className="text-[9px] text-slate-500 mt-0.5 font-mono">
+                    Bal: {cubes} 💠
+                  </span>
                 </div>
-                <div className="text-white text-xl font-black font-mono flex items-center justify-center gap-1.5">
-                  <span>{isMaxBlobs ? 'MAX (10/10)' : summonCost}</span>
-                  {!isMaxBlobs && <span className="text-[#00cfff]">💠</span>}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                  Your Balance: {cubes} 💠 ({currentBlobCount}/10 Blobs)
+
+                {/* USDC Option */}
+                <div className="bg-slate-900/60 border border-emerald-500/20 rounded-2xl p-2.5 flex flex-col items-center">
+                  <span className="text-emerald-400/80 text-[9px] font-black uppercase tracking-wider mb-0.5 font-mono">
+                    On-Chain USDC
+                  </span>
+                  <span className="text-white text-sm font-black font-mono flex items-center gap-1">
+                    {isMaxBlobs ? 'MAX (10/10)' : '0.20 USDC'}
+                  </span>
+                  <span className="text-[9px] text-emerald-400/70 mt-0.5 font-mono">
+                    Treasury Direct
+                  </span>
                 </div>
               </div>
 
@@ -188,15 +314,38 @@ export const SummonModal: React.FC<SummonModalProps> = ({
                   whileTap={{ scale: (cubes < summonCost || isSummoning || isMaxBlobs) ? 1.0 : 0.98 }}
                   onClick={handleInitiateSummon}
                   disabled={cubes < summonCost || isSummoning || isMaxBlobs}
-                  className={`w-full py-3.5 rounded-2xl text-xs font-black text-white bg-gradient-to-r from-[#0052ff] to-[#00cfff] border border-white/10 hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-blue-500/20 cursor-pointer ${
+                  className={`w-full py-3 rounded-2xl text-xs font-black text-white bg-gradient-to-r from-[#0052ff] to-[#00cfff] border border-white/10 hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-blue-500/20 cursor-pointer ${
                     (cubes < summonCost || isSummoning || isMaxBlobs) ? 'opacity-50 cursor-not-allowed filter grayscale' : ''
                   }`}
                 >
-                  {isSummoning ? 'PREPARE IN WALLET...' : isMaxBlobs ? 'MAX BLOBS REACHED (10/10)' : 'SIGN & INITIATE CONTRACT'}
+                  {isSummoning && summonMethod === 'cubes'
+                    ? 'PREPARE IN WALLET...'
+                    : isMaxBlobs
+                    ? 'MAX BLOBS REACHED (10/10)'
+                    : `SUMMON WITH CUBES (${summonCost} 💠)`}
                 </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: (isSummoning || isMaxBlobs || !rawWalletAddress) ? 1.0 : 1.02 }}
+                  whileTap={{ scale: (isSummoning || isMaxBlobs || !rawWalletAddress) ? 1.0 : 0.98 }}
+                  onClick={handleInitiateSummonPaid}
+                  disabled={isSummoning || isMaxBlobs || !rawWalletAddress}
+                  className={`w-full py-3 rounded-2xl text-xs font-black text-slate-950 bg-gradient-to-r from-emerald-400 to-teal-300 border border-emerald-400/30 hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer ${
+                    (isSummoning || isMaxBlobs || !rawWalletAddress) ? 'opacity-50 cursor-not-allowed filter grayscale' : ''
+                  }`}
+                >
+                  {isSummoning && summonMethod === 'usdc'
+                    ? 'AWAITING USDC TRANSFER...'
+                    : isMaxBlobs
+                    ? 'MAX BLOBS REACHED (10/10)'
+                    : !rawWalletAddress
+                    ? 'CONNECT WALLET FOR USDC'
+                    : 'SUMMON WITH USDC (0.20 USDC)'}
+                </motion.button>
+
                 <button
                   onClick={onClose}
-                  className="w-full py-2 rounded-xl text-[10px] font-extrabold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                  className="w-full py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
                 >
                   CANCEL TRANSACTION
                 </button>
@@ -204,7 +353,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
             </motion.div>
           )}
 
-          {/* STAGE 2: SIGNING (Web3 wallet signature popup simulation) */}
+          {/* STAGE 2: SIGNING */}
           {stage === 'signing' && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -217,13 +366,12 @@ export const SummonModal: React.FC<SummonModalProps> = ({
               </div>
               
               <h4 className="text-white text-sm font-black tracking-tight font-display">
-                Requesting Signature...
+                {summonMethod === 'usdc' ? 'Confirm USDC Transfer...' : 'Requesting Signature...'}
               </h4>
               <p className="text-[#00cfff] text-[9px] font-mono mt-1.5 animate-pulse">
-                await wallet.signMessage(...)
+                {summonMethod === 'usdc' ? 'await usdc.transfer(treasury, 0.20)' : 'await wallet.signMessage(...)'}
               </p>
               
-              {/* Fake web3 tx metadata */}
               <div className="w-full mt-5 p-3.5 bg-black/40 border border-white/5 rounded-2xl text-left font-mono text-[9px] text-slate-400 space-y-1.5">
                 <div className="flex justify-between border-b border-white/5 pb-1 mb-1 text-[8px] uppercase font-black text-slate-500">
                   <span>Transaction Request</span>
@@ -231,18 +379,26 @@ export const SummonModal: React.FC<SummonModalProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-500">Contract:</span>{' '}
-                  <span className="text-blue-400 font-bold">0xBlobRegistry...</span>
+                  <span className="text-blue-400 font-bold">
+                    {summonMethod === 'usdc' ? '0x8335...2913 (USDC)' : '0xBlobRegistry...'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-500">Method:</span>{' '}
-                  <span className="text-yellow-400 font-semibold">mintRandomBlob()</span>
+                  <span className="text-yellow-400 font-semibold">
+                    {summonMethod === 'usdc' ? 'transfer(to, amount)' : 'mintRandomBlob()'}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-slate-500">Value:</span> {summonCost} Cubes (Sponsored)
+                  <span className="text-slate-500">Value:</span>{' '}
+                  {summonMethod === 'usdc' ? '0.20 USDC' : `${summonCost} Cubes (Sponsored)`}
                 </div>
-                <div>
-                  <span className="text-slate-500">Gas Limit:</span> 21000 (Zero Fee)
-                </div>
+                {summonMethod === 'usdc' && (
+                  <div>
+                    <span className="text-slate-500">Recipient:</span>{' '}
+                    <span className="text-emerald-400 font-bold">0xC3dc...8652</span>
+                  </div>
+                )}
               </div>
 
               <p className="text-[8px] text-slate-500 mt-5 font-mono text-center max-w-[200px]">
@@ -251,7 +407,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
             </motion.div>
           )}
 
-          {/* STAGE 3: REVEAL (Final unlocked companion) */}
+          {/* STAGE 3: REVEAL */}
           {stage === 'reveal' && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -305,7 +461,7 @@ export const SummonModal: React.FC<SummonModalProps> = ({
                   </div>
                 </div>
 
-                {/* Rolled upgrade branches — the actual reveal moment */}
+                {/* Rolled upgrade branches */}
                 <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-3">
                   <div className="text-[10px] font-black text-[#00cfff] uppercase tracking-wider mb-2 font-mono flex items-center justify-between">
                     <span>Upgrade Branches</span>
