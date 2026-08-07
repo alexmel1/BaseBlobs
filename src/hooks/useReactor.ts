@@ -684,7 +684,7 @@ export function useReactor(
 
   // Real-time estimated reward during collecting phase
   const estimatedReward = reactor && reactor.totalContributed > 0 && myContrib?.contributed
-    ? Math.floor((myContrib.contributed / reactor.totalContributed) * reactor.totalReward)
+    ? (myContrib.contributed / reactor.totalContributed) * reactor.totalReward
     : 0;
 
   const msUntilClaimEnd = reactor?.claimWindowEnd

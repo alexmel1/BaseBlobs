@@ -48,10 +48,26 @@ function fmtCountdown(ms: number): string {
   return `${m}m`;
 }
 
+export function formatUsdcReward(val: number): string {
+  if (!val || val <= 0) return '$0';
+  if (val >= 1000) {
+    return `$${val.toLocaleString(undefined, { maximumFractionDigits: 3 })}`;
+  }
+  if (val >= 1) {
+    return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  }
+  if (val >= 0.001) {
+    const str = val.toFixed(4).replace(/\.?0+$/, '');
+    return `$${str}`;
+  }
+  const str = val.toFixed(9).replace(/\.?0+$/, '');
+  return `$${str}`;
+}
+
 const QUICK_AMOUNTS = [100, 500, 1000, 5000, 10000];
 
 /** Флаг доступности реактора. Когда false — показываем анонс USDC Reward Pool */
-export const REACTOR_LIVE = false;
+export const REACTOR_LIVE = true;
 
 /** Палитра под фазу: ядро, акценты и тексты берут цвет отсюда */
 const PHASE_THEME: Record<string, { color: string; label: string; sub: string }> = {
@@ -367,7 +383,7 @@ export function ReactorModal({
                   <StatTile
                     icon={<TrendingUp className="w-3 h-3" />}
                     label="Est. reward"
-                    value={estimatedReward > 0 ? `${estimatedReward.toLocaleString()} ⬡` : '—'}
+                    value={myContribution > 0 || estimatedReward > 0 ? formatUsdcReward(estimatedReward) : '—'}
                     accent="#34d399"
                   />
                 </div>
@@ -495,10 +511,7 @@ export function ReactorModal({
                       >
                         <p className="text-slate-400 text-xs mb-1">Your allocation</p>
                         <p className="text-white font-black text-4xl font-mono">
-                          {myAllocation.toLocaleString()}
-                        </p>
-                        <p className="text-lg font-black mt-1" style={{ color: theme.color }}>
-                          USDC
+                          {formatUsdcReward(myAllocation)}
                         </p>
                         <p className="text-slate-500 text-[10px] mt-2">
                           Based on your {myContribution.toLocaleString()} Cube contribution
