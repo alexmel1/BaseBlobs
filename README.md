@@ -44,8 +44,9 @@ Players:
 - collect 💠 Cubes and XP
 - level up Blobs and upgrade them along the branches each one rolled at summon
 - capture and defend Network Nodes for passive income
-- summon new Blobs and expand their collection
-- contribute Cubes to community Reactor events to earn real **$BLOBS** tokens on Base
+- summon new Blobs and expand their collection — with Cubes, or instantly for 0.20 USDC
+- contribute Cubes to community Reactor events to earn real **USDC** on Base
+- battle other players' squads in the weekly Arena for Cube and cosmetic rewards
 
 ---
 
@@ -156,24 +157,14 @@ Every completed expedition rolls one event on settlement:
 # 🐣 Blob Collection
 
 ## Summoning
-- **Cost:** starts at 1,500 💠 Cubes, increasing by +500 for each Blob you already own
-- **Collection cap:** 10 Blobs
+Two ways to summon, sharing the same collection cap:
+- **Cubes:** starts at 1,500 💠 Cubes, increasing by +500 for each Blob you already own
+- **USDC:** flat 0.20 USDC per Blob, paid on-chain to the treasury wallet and verified server-side before the Blob is granted
+- **Collection cap:** 10 Blobs total, from either path combined
 - Each summon rolls a random personality Blob, starting at Lv. 1
 
 ## Blob Info & FAQ
 An in-app FAQ panel explains stats, personalities, upgrades, expeditions, Nodes, and the Reactor — everything a new player needs to get oriented.
-
----
-
-# 📋 Daily Quests
-
-Reset every 24 hours:
-
-| Quest | Reward |
-|-------|--------|
-| Complete 1 expedition | 💠 50 + 50 XP |
-| Collect 100 Cubes | 💠 50 + 40 XP |
-| Tap your Blob 5 times | 💠 25 + 25 XP |
 
 ---
 
@@ -190,7 +181,7 @@ Map-based locations that generate passive Cubes once captured (accumulates up to
 
 # ☢️ The Reactor
 
-A recurring, community-wide event: contribute Cubes toward a shared pool target. When the target is reached, contributors split a pool of **$BLOBS** tokens proportional to their contribution — claimed directly to your wallet on Base (small gas fee applies for the claim transaction).
+A recurring, community-wide event: contribute Cubes toward a shared pool target. When the target is reached, contributors split a real **USDC** pool proportional to their contribution, via a Merkle-drop claim on Base (small gas fee applies for the claim transaction). Claiming has no deadline — each closed season's Merkle tree is archived, so a reward stays claimable long after a new season starts.
 
 ---
 
@@ -201,8 +192,9 @@ A recurring, community-wide event: contribute Cubes toward a shared pool target.
 | 🏠 **Home** | Your main Blob, XP bar, energy, My Blobs collection |
 | 🗺 **Explore** | Expedition zones with tier badges, timers, rewards |
 | ⬆️ **Upgrades** | The 3 branches this Blob rolled + evolution status |
-| 🛒 **Shop** | Blob summon |
-| 📋 **Quests** | Daily quests with Cube + XP rewards |
+| 🛒 **Shop** | Blob summon (Cubes or USDC) |
+| ⚔️ **Arena** | Weekly 3v3 PvP ladder, MMR matchmaking, battle replay |
+| ☢️ **Reactor** | Community USDC pool, contribute Cubes, claim your share |
 | ❓ **FAQ** | In-app guide to every game mechanic |
 
 ---
@@ -229,9 +221,9 @@ A recurring, community-wide event: contribute Cubes toward a shared pool target.
 
 | Feature | Where |
 |---------|-------|
-| Levels, XP, Cubes, quests, upgrades, Node ownership | Server-authoritative (Firestore + backend API) |
-| $BLOBS token claim from Reactor events | ✅ Live on Base |
-| Blob NFT mint | 🔜 Planned, not yet live |
+| Levels, XP, Cubes, upgrades, Node ownership, Arena matches | Server-authoritative (Firestore + backend API) |
+| USDC claim from Reactor events | ✅ Live on Base — Merkle-drop claim, `BlobReactorV2` contract |
+| Paid Blob summon | ✅ Live on Base — plain USDC transfer, verified server-side (no custom contract) |
 
 **Wallet support:** Any wallet supported via WalletConnect (Reown) — including Coinbase / Base App and MetaMask.
 
@@ -241,19 +233,14 @@ A recurring, community-wide event: contribute Cubes toward a shared pool target.
 
 # 🆕 Latest Updates
 
+- **Reactor rebuilt on USDC** — moved off the old $BLOBS token onto a new `BlobReactorV2` contract paying out real USDC, via server-verified Merkle-drop claims. Past seasons are archived so a claim never expires, even after the next season starts.
+- **Arena shipped** — weekly 3v3 PvP: register a squad, 5 fights/day, server-computed combat, MMR matchmaking against other live squads (bot opponents when the pool is empty), canvas battle replay. Season leaderboard payouts are still in progress.
+- **Paid Blob summon** — summon instantly for 0.20 USDC as an alternative to grinding Cubes, sharing the same 10-Blob cap. Verified server-side against the actual on-chain payment, no custom contract involved.
 - **Per-Blob upgrade branches** — 7 branches total, each Blob rolls its own 3 at summon. Mining vs Combat split, guaranteed one of each. Existing Blobs keep their original three, so nothing invested is lost.
-- **Combat branches** — Vigor, Guard and Ferocity now feed real Node combat maths (attack, defense, fortification) and are the foundation for the upcoming Arena.
+- **Combat branches** — Vigor, Guard and Ferocity feed real Node *and* Arena combat maths (attack, defense, fortification).
 - **Data Storm rebalanced** — was a flat −30% Cube punishment, now a trade: ×0.85 Cubes for ×1.3 XP. Jackpot, Awakening and Blob Charm all got slightly more common.
 - **Reactor is a full screen** — no longer a blocking modal; navigate freely from the bottom bar like every other section.
 - **Reworked Home** — accurate Blob stat card (the old one advertised bonuses that did not exist), per-Blob XP bars on every card, and calmer primary actions.
-
-# 🔭 Planned
-
-- ⚔️ **Arena** — weekly PvP ladder built on the Combat branches
-- 🏆 **Leaderboards**
-- 🍖 **Blob feeding / mood** — mood already affects Power; the feeding loop is not wired up yet
-- 🧬 **Traits** — data is in place, not yet granted to Blobs
-- 🖼️ **Blob NFT mint**
 
 ---
 
