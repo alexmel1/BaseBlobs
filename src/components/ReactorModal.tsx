@@ -32,6 +32,7 @@ interface ReactorModalProps {
   claimTxHash: string | null;
   walletAddress: string | null;
   firestoreError?: string | null;
+  actionError?: string | null;
   unclaimedRewards?: UnclaimedReward[];
   onContribute: (amount: number) => Promise<boolean>;
   onClaim: () => Promise<boolean>;
@@ -51,10 +52,10 @@ function fmtCountdown(ms: number): string {
 export function formatUsdcReward(val: number): string {
   if (!val || val <= 0) return '$0';
   if (val >= 1000) {
-    return `$${val.toLocaleString(undefined, { maximumFractionDigits: 3 })}`;
+    return `$${val.toLocaleString('en-US', { maximumFractionDigits: 3 })}`;
   }
   if (val >= 1) {
-    return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+    return `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
   }
   if (val >= 0.001) {
     const str = val.toFixed(4).replace(/\.?0+$/, '');
@@ -109,7 +110,7 @@ export function ReactorModal({
   progressPercent, synthesizingProgress, msUntilClaimEnd,
   myContribution, estimatedReward, myAllocation, myClaimed,
   cubes, isClaiming, claimError, claimTxHash,
-  walletAddress, firestoreError, unclaimedRewards, onContribute, onClaim, onClaimArchive,
+  walletAddress, firestoreError, actionError, unclaimedRewards, onContribute, onClaim, onClaimArchive,
 }: ReactorModalProps) {
   const [customAmount, setCustomAmount] = useState('');
   const [contributing, setContributing] = useState(false);
@@ -211,7 +212,7 @@ export function ReactorModal({
           {/* Current player Cubes counter */}
           <div className="inline-flex items-center justify-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-2.5 text-amber-300 font-mono font-bold text-sm shadow-inner">
             <span>Your Cubes:</span>
-            <span className="text-amber-400 text-base font-black">{cubes.toLocaleString()} 💠</span>
+            <span className="text-amber-400 text-base font-black">{cubes.toLocaleString('en-US')} 💠</span>
           </div>
         </div>
       </div>
@@ -302,6 +303,17 @@ export function ReactorModal({
               </div>
             )}
 
+            {/* Server action error (business logic error like contribution cap) */}
+            {actionError && (
+              <div className="mb-4 bg-red-950/40 border border-red-500/30 text-red-300 rounded-2xl p-3 text-xs leading-relaxed flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-red-200">Contribution Error</p>
+                  <p className="text-red-300 mt-0.5">{actionError}</p>
+                </div>
+              </div>
+            )}
+
             {/* Firestore error warning */}
             {firestoreError && (
               <div className="mb-4 bg-red-950/40 border border-red-500/30 text-red-300 rounded-2xl p-3 text-xs leading-relaxed">
@@ -342,7 +354,7 @@ export function ReactorModal({
                     <Sparkles className="w-3 h-3" />
                     {phase === 'synthesizing'
                       ? `${Math.min(100, Math.round(synthesizingProgress))}% synthesized`
-                      : `${totalContributed.toLocaleString()} / ${target.toLocaleString()} Cubes`}
+                      : `${totalContributed.toLocaleString('en-US')} / ${target.toLocaleString('en-US')} Cubes`}
                   </span>
                 </div>
               </div>
@@ -364,13 +376,13 @@ export function ReactorModal({
                   <StatTile
                     icon={<Users className="w-3 h-3" />}
                     label="Contributors"
-                    value={contributorsCount.toLocaleString()}
+                    value={contributorsCount.toLocaleString('en-US')}
                     accent="#94a3b8"
                   />
                   <StatTile
                     icon={<TrendingUp className="w-3 h-3" />}
                     label="Pool"
-                    value={`${totalReward.toLocaleString()} USDC`}
+                    value={`${totalReward.toLocaleString('en-US')} USDC`}
                     accent={theme.color}
                   />
                 </div>
@@ -378,7 +390,7 @@ export function ReactorModal({
                   <StatTile
                     icon={<Coins className="w-3 h-3" />}
                     label="Your contribution"
-                    value={`${myContribution.toLocaleString()} 💠`}
+                    value={`${myContribution.toLocaleString('en-US')} 💠`}
                   />
                   <StatTile
                     icon={<TrendingUp className="w-3 h-3" />}
@@ -394,7 +406,7 @@ export function ReactorModal({
                     <p className="text-white text-sm font-bold mb-2 flex items-center justify-between">
                       <span>Contribute Cubes</span>
                       <span className="text-slate-500 text-xs font-normal font-mono">
-                        Available: {cubes.toLocaleString()} 💠
+                        Available: {cubes.toLocaleString('en-US')} 💠
                       </span>
                     </p>
 
@@ -445,7 +457,7 @@ export function ReactorModal({
                     )}
 
                     <p className="text-slate-600 text-[10px] text-center mt-2">
-                      More Cubes = larger share of the {totalReward.toLocaleString()} USDC pool
+                      More Cubes = larger share of the {totalReward.toLocaleString('en-US')} USDC pool
                     </p>
                   </>
                 ) : (
@@ -470,7 +482,7 @@ export function ReactorModal({
                   <div className="mt-4 bg-white/[0.04] border border-white/8 rounded-2xl p-3">
                     <p className="text-slate-400 text-xs">Your contribution</p>
                     <p className="text-white font-black text-lg font-mono">
-                      {myContribution.toLocaleString()} 💠
+                      {myContribution.toLocaleString('en-US')} 💠
                     </p>
                   </div>
                 )}
@@ -490,7 +502,7 @@ export function ReactorModal({
                       </div>
                       <p className="text-emerald-400 font-black text-lg">Claimed!</p>
                       <p className="text-slate-400 text-xs mt-2">
-                        {myAllocation.toLocaleString()} USDC sent to your wallet.
+                        {myAllocation.toLocaleString('en-US')} USDC sent to your wallet.
                       </p>
                       {claimTxHash && (
                         <a
@@ -514,7 +526,7 @@ export function ReactorModal({
                           {formatUsdcReward(myAllocation)}
                         </p>
                         <p className="text-slate-500 text-[10px] mt-2">
-                          Based on your {myContribution.toLocaleString()} Cube contribution
+                          Based on your {myContribution.toLocaleString('en-US')} Cube contribution
                           {sharePercent > 0 && ` · ${sharePercent.toFixed(2)}% share`}
                         </p>
                       </div>
@@ -537,7 +549,7 @@ export function ReactorModal({
                         ) : (
                           <>
                             <Gift className="w-5 h-5" />
-                            Claim {myAllocation.toLocaleString()} USDC
+                            Claim {myAllocation.toLocaleString('en-US')} USDC
                           </>
                         )}
                       </button>

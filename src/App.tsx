@@ -848,7 +848,7 @@ export default function App() {
   // Format Helper: Big numbers
   const formatNumber = (n: number) => {
     if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-    return n.toLocaleString();
+    return n.toLocaleString('en-US');
   };
 
   // Connect Wallet Actions & Helper
@@ -1258,7 +1258,7 @@ export default function App() {
     try {
       const { earned, error } = await networkMap.collectAll();
       if (earned > 0) {
-        triggerToast(`💠 Collected all nodes! Total: +${earned.toLocaleString()} Cubes!`);
+        triggerToast(`💠 Collected all nodes! Total: +${earned.toLocaleString('en-US')} Cubes!`);
       } else if (error) {
         triggerToast(`❌ ${error}`);
       } else {
@@ -2685,6 +2685,7 @@ export default function App() {
             claimTxHash={reactor.claimTxHash}
             walletAddress={rawWalletAddress}
             firestoreError={reactor.firestoreError}
+            actionError={reactor.actionError}
             unclaimedRewards={reactor.unclaimedRewards}
             onContribute={reactor.contribute}
             onClaim={reactor.claimTokens}

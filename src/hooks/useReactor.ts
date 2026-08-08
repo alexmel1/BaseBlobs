@@ -265,6 +265,7 @@ export function useReactor(
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimTxHash, setClaimTxHash] = useState<string | null>(null);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [unclaimedRewards, setUnclaimedRewards] = useState<UnclaimedReward[]>([]);
   const [contributedEvents, setContributedEvents] = useState<number[]>([]);
 
@@ -359,6 +360,7 @@ export function useReactor(
     if (cubeAmount <= 0) return false;
 
     setFirestoreError(null);
+    setActionError(null);
     const addr = rawWalletAddress.toLowerCase();
     const currentEventId = reactor.eventId;
 
@@ -436,7 +438,7 @@ export function useReactor(
       }
     } catch (e: any) {
       console.error('Reactor contribution server sync failed:', e);
-      setFirestoreError(e.message || 'Contribution failed');
+      setActionError(e.message || 'Contribution failed');
 
       // Revert optimistic state
       setReactor(reactor);
@@ -710,6 +712,7 @@ export function useReactor(
     claimError,
     claimTxHash,
     firestoreError,
+    actionError,
     unclaimedRewards,
     contribute,
     claimTokens,

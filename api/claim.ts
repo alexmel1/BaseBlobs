@@ -27,6 +27,8 @@ import type { ExpeditionEventType, PersonalityType, UpgradeBranchId } from '../s
 import { ethers } from 'ethers';
 import { USDC_ADDRESS, TREASURY_ADDRESS, SUMMON_USDC_PRICE, BASE_RPC } from '../src/contracts/reactorConfig.js';
 
+export const MAX_CONTRIBUTION_PERCENT = 0.15; // 15% of event target per player
+
 function getAdminDb(): Firestore {
   const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!key) {
@@ -699,16 +701,16 @@ async function claimReactorContribute(
     const existingContrib = contribSnap.exists ? contribSnap.data()! : null;
     const isSameEvent = existingContrib && Number(existingContrib.eventId || 0) === eventId;
     const priorContributed = isSameEvent ? Number(existingContrib!.contributed || 0) : 0;
-    const MAX_CONTRIBUTION_PER_EVENT = 10000;
-    if (priorContributed + amount > MAX_CONTRIBUTION_PER_EVENT) {
-      throw new Error(`Contribution cap reached (${MAX_CONTRIBUTION_PER_EVENT} per event)`);
+    const targetCubes = Number(global.target || Infinity);
+    const maxContribution = Math.floor(targetCubes * MAX_CONTRIBUTION_PERCENT);
+    if (priorContributed + amount > maxContribution) {
+      throw new Error(`Contribution cap reached (${maxContribution} per event)`);
     }
 
     const newCubes = currentCubes - amount;
     const newRev = (state.rev || 0) + 1;
 
     const newTotalContributed = Number(global.totalContributed || 0) + amount;
-    const targetCubes = Number(global.target || Infinity);
     if (Number(global.totalContributed || 0) >= targetCubes) {
       throw new Error('Reactor target already reached, wait for the next event');
     }
