@@ -37,9 +37,12 @@ const MATCHES = 'arena_matches';
 /** Номер сезона от фиксированной точки: понедельник, 00:00 UTC. */
 const SEASON_EPOCH = Date.UTC(2026, 0, 5); // 5 января 2026 — понедельник
 
-export function currentSeason(now: number): number {
-  const week = 7 * 86400_000;
-  return Math.max(1, Math.floor((now - SEASON_EPOCH) / week) + 1);
+// Сезоны временно заморожены на 1 — сезонных наград ещё нет.
+// Когда будут готовы сезонные награды за топ, вернуть дату-based расчёт:
+// новый SEASON_EPOCH = дата реального старта сезонов, и увеличить шаг
+// (например SEASON_LENGTH_MS = 14 или 30 дней вместо недели).
+export function currentSeason(_now: number): number {
+  return 1;
 }
 
 /** Начало следующих UTC-суток — считает только сервер. */

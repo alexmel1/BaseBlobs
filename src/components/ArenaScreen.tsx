@@ -31,7 +31,7 @@ interface ArenaScreenProps {
   battlesLeft: number;
   dailyResetAt: number;
   season: number;
-  seasonEndsAt: number;
+  seasonEndsAt: number | null;
   matches: ArenaMatchRecord[];
   leaderboard: LeaderboardRow[];
   myRank: number | null;
@@ -337,7 +337,8 @@ export function ArenaScreen(props: ArenaScreenProps) {
   );
 }
 
-function ArenaHeader({ season, seasonEndsAt }: { season: number; seasonEndsAt: number }) {
+function ArenaHeader({ season, seasonEndsAt }: { season: number; seasonEndsAt: number | null }) {
+  const msLeft = seasonEndsAt ? seasonEndsAt - Date.now() : 0;
   return (
     <div className="flex items-center gap-3 mb-3">
       <div
@@ -351,7 +352,7 @@ function ArenaHeader({ season, seasonEndsAt }: { season: number; seasonEndsAt: n
           Arena
         </h2>
         <p className="text-slate-400 text-xs mt-0.5">
-          Season {season} · ends in {fmtCountdown(seasonEndsAt - Date.now())}
+          Season {season}{seasonEndsAt && msLeft > 0 ? ` · ends in ${fmtCountdown(msLeft)}` : ''}
         </p>
       </div>
     </div>
