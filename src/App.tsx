@@ -328,6 +328,7 @@ export default function App() {
     return raw ? `wallet_${raw.toLowerCase()}` : null;
   });
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [isSwitchingWallet, setIsSwitchingWallet] = useState(false);
   const [hasLoadedCloud, setHasLoadedCloud] = useState<boolean>(false);
   const [saveTrigger, setSaveTrigger] = useState(0);
 
@@ -440,6 +441,7 @@ export default function App() {
   useEffect(() => {
     if (!syncId) {
       setHasLoadedCloud(false);
+      setIsSwitchingWallet(false);
       return;
     }
 
@@ -456,6 +458,7 @@ export default function App() {
             syncAndSetState(validated);
             revRef.current = validated.rev ?? 0;
             setHasLoadedCloud(true);
+            setIsSwitchingWallet(false);
             triggerToast('Cloud save loaded! Progress synced.');
           }
         } else {
@@ -463,8 +466,16 @@ export default function App() {
           if (rawWalletAddress) {
             await checkServerStatus();
           }
+          // Re-fetch cloud state after checkServerStatus created or confirmed it
+          const newCloudState = await loadGameState(syncId);
           if (isMounted) {
+            if (newCloudState) {
+              const validated = validateAndMigrateState(newCloudState);
+              syncAndSetState(validated);
+              revRef.current = validated.rev ?? 0;
+            }
             setHasLoadedCloud(true);
+            setIsSwitchingWallet(false);
             triggerToast('Wallet save synced with cloud.');
           }
         }
@@ -473,8 +484,9 @@ export default function App() {
           if (e.cloudState && isMounted) {
             const validated = validateAndMigrateState(e.cloudState);
             syncAndSetState(validated);
-            revRef.current = validated.rev ?? e.cloudState.rev ?? 0;
+            revRef.current = e.cloudState.rev ?? revRef.current;
             setHasLoadedCloud(true);
+            setIsSwitchingWallet(false);
           }
         } else {
           if (!isOfflineError(e)) {
@@ -482,11 +494,14 @@ export default function App() {
           }
           if (isMounted) {
             triggerToast('⚠️ Unable to load cloud save. Check connection.');
+            setHasLoadedCloud(true);
+            setIsSwitchingWallet(false);
           }
         }
       } finally {
         if (isMounted) {
           setIsCloudSyncing(false);
+          setIsSwitchingWallet(false);
         }
       }
 
@@ -500,6 +515,7 @@ export default function App() {
             syncAndSetState(validated);
             revRef.current = remoteRev;
             setHasLoadedCloud(true);
+            setIsSwitchingWallet(false);
           }
         });
       }
@@ -588,6 +604,7 @@ export default function App() {
             syncAndSetState(validated);
             revRef.current = remoteRev;
             setHasLoadedCloud(true);
+            setIsSwitchingWallet(false);
           }
         }
       }
@@ -648,10 +665,10 @@ export default function App() {
 
   // 🌟 Auto-show Welcome Modal on initial wallet connect
   useEffect(() => {
-    if (rawWalletAddress && hasLoadedCloud && !state.hasSeenWelcome) {
+    if (rawWalletAddress && hasLoadedCloud && !isSwitchingWallet && !state.hasSeenWelcome) {
       setIsWelcomeModalOpen(true);
     }
-  }, [rawWalletAddress, hasLoadedCloud, state.hasSeenWelcome]);
+  }, [rawWalletAddress, hasLoadedCloud, isSwitchingWallet, state.hasSeenWelcome]);
 
   const handleMarkWelcomeSeen = async () => {
     setIsWelcomeModalOpen(false);
@@ -903,13 +920,13 @@ export default function App() {
       if (localSaveForNewWallet) {
         try {
           syncAndSetState(validateAndMigrateState(JSON.parse(localSaveForNewWallet)));
+          setIsSwitchingWallet(false);
         } catch (e) {
-          // Let cloud load handle state hydration
-          syncAndSetState({ ...getDefaultState(), initialized: true });
+          setIsSwitchingWallet(true);
         }
       } else {
-        // Reset state to clean default so previous wallet data is not displayed
-        syncAndSetState({ ...getDefaultState(), initialized: true });
+        // Do not reset state to dummy default! Set isSwitchingWallet to true so UI shows loader until cloud save loads
+        setIsSwitchingWallet(true);
       }
 
       setHasLoadedCloud(false);
@@ -919,6 +936,7 @@ export default function App() {
     } else {
       // Already loaded/in sync, just ensure state reflects it
       setSyncId(newSyncId);
+      setIsSwitchingWallet(false);
     }
     
     localStorage.setItem('bb_formatted_wallet', formatted);
@@ -942,6 +960,7 @@ export default function App() {
         setSyncId(null);
         setHasLoadedCloud(false);
         setIsCloudSyncing(false);
+        setIsSwitchingWallet(false);
         sessionExpiredNoticeRef.current = false;
 
         if (rawWalletAddress) {
@@ -983,6 +1002,7 @@ export default function App() {
     setSyncId(null);
     setHasLoadedCloud(false);
     setIsCloudSyncing(false);
+    setIsSwitchingWallet(false);
     // Переподключённый кошелёк должен снова уметь сообщить об истёкшей сессии
     sessionExpiredNoticeRef.current = false;
 
@@ -1362,12 +1382,14 @@ export default function App() {
   };
   const evolutionProgress = getEvolutionProgress();
 
-  if (!state.initialized) {
+  if (!state.initialized || isSwitchingWallet) {
     return (
       <div className="min-h-screen bg-[#06091a] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="text-4xl animate-bounce">🟦</div>
-          <p className="text-slate-400 text-sm animate-pulse font-mono tracking-wide">Loading BaseBlobs…</p>
+          <p className="text-slate-400 text-sm animate-pulse font-mono tracking-wide">
+            {isSwitchingWallet ? 'Loading your Blobs...' : 'Loading BaseBlobs…'}
+          </p>
         </div>
       </div>
     );
