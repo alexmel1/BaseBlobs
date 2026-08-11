@@ -13,7 +13,7 @@
  */
 
 import { Firestore } from 'firebase-admin/firestore';
-import { createDefaultSave } from './claim.js';
+import { createDefaultSave, isValidFullState, repairSaveState } from './claim.js';
 import {
   ARENA_CONFIG,
   buildArenaFighter,
@@ -120,7 +120,14 @@ export async function arenaRegister(
       state = createDefaultSave();
       tx.set(saveRef, state);
     } else {
-      state = saveSnap.data()!;
+      const data = saveSnap.data()!;
+      if (!isValidFullState(data)) {
+        console.error(`[arenaRegister] Corrupt or incomplete save for syncId: ${syncId}. Repairing.`);
+        state = repairSaveState(data);
+        tx.set(saveRef, state, { merge: true });
+      } else {
+        state = data;
+      }
     }
 
     const now = Date.now();
@@ -296,7 +303,14 @@ export async function arenaFight(
       state = createDefaultSave();
       tx.set(saveRef, state);
     } else {
-      state = saveSnap.data()!;
+      const data = saveSnap.data()!;
+      if (!isValidFullState(data)) {
+        console.error(`[arenaFight] Corrupt or incomplete save for syncId: ${syncId}. Repairing.`);
+        state = repairSaveState(data);
+        tx.set(saveRef, state, { merge: true });
+      } else {
+        state = data;
+      }
     }
     if (state.lastUpdated && now - state.lastUpdated < 1000) {
       throw new Error('Too many requests, slow down');

@@ -108,13 +108,49 @@ export function createDefaultSave(): Record<string, any> {
   };
 }
 
-async function getOrCreateSaveState(
+export function isValidFullState(s: any): boolean {
+  return (
+    s &&
+    Array.isArray(s.blobs) &&
+    s.blobs.length > 0 &&
+    typeof s.cubes === 'number' &&
+    typeof s.energy === 'number' &&
+    typeof s.selectedId === 'string'
+  );
+}
+
+export function repairSaveState(data: any): Record<string, any> {
+  const defaultSave = createDefaultSave();
+  const repaired = { ...defaultSave, ...data };
+
+  if (!Array.isArray(repaired.blobs) || repaired.blobs.length === 0) {
+    repaired.blobs = defaultSave.blobs;
+  }
+  if (typeof repaired.cubes !== 'number') repaired.cubes = defaultSave.cubes;
+  if (typeof repaired.energy !== 'number') repaired.energy = defaultSave.energy;
+  if (typeof repaired.selectedId !== 'string') repaired.selectedId = repaired.blobs[0]?.id || 'b1';
+  if (typeof repaired.expPickId !== 'string') repaired.expPickId = repaired.selectedId;
+  if (!Array.isArray(repaired.expPickIds) || repaired.expPickIds.length === 0) {
+    repaired.expPickIds = [repaired.expPickId];
+  }
+
+  return repaired;
+}
+
+export async function getOrCreateSaveState(
   tx: FirebaseFirestore.Transaction,
   saveRef: FirebaseFirestore.DocumentReference
 ): Promise<{ state: Record<string, any>; isNew: boolean }> {
   const snap = await tx.get(saveRef);
   if (snap.exists) {
-    return { state: snap.data()!, isNew: false };
+    const data = snap.data()!;
+    if (isValidFullState(data)) {
+      return { state: data, isNew: false };
+    }
+    console.error(`[CRITICAL] Corrupt or incomplete save document in Firestore for syncId: ${saveRef.id}. Repairing document.`);
+    const repaired = repairSaveState(data);
+    tx.set(saveRef, repaired, { merge: true });
+    return { state: repaired, isNew: false };
   }
   const initialState = createDefaultSave();
   tx.set(saveRef, initialState);
@@ -181,7 +217,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         state = createDefaultSave();
         await saveRef.set(state);
       } else {
-        state = snap.data()!;
+        const data = snap.data()!;
+        if (!isValidFullState(data)) {
+          console.error(`[CRITICAL] Save document ${syncId} exists in Firestore but is missing required fields. Repairing state.`);
+          state = repairSaveState(data);
+          await saveRef.set(state, { merge: true });
+        } else {
+          state = data;
+        }
       }
       const now = Date.now();
       const expeditions: any[] = state.activeExpeditions || (state.activeExpedition ? [state.activeExpedition] : []);
@@ -476,7 +519,14 @@ async function claimNode(db: Firestore, syncId: string, walletAddress: string, n
       state = createDefaultSave();
       tx.set(saveRef, state);
     } else {
-      state = saveSnap.data()!;
+      const data = saveSnap.data()!;
+      if (!isValidFullState(data)) {
+        console.error(`[claimNode] Corrupt or incomplete save for syncId: ${syncId}. Repairing.`);
+        state = repairSaveState(data);
+        tx.set(saveRef, state, { merge: true });
+      } else {
+        state = data;
+      }
     }
     const node = nodeSnap.data()!;
 
@@ -573,7 +623,14 @@ async function claimAllNodes(db: Firestore, syncId: string, walletAddress: strin
       state = createDefaultSave();
       tx.set(saveRef, state);
     } else {
-      state = saveSnap.data()!;
+      const data = saveSnap.data()!;
+      if (!isValidFullState(data)) {
+        console.error(`[claimAllNodes] Corrupt or incomplete save for syncId: ${syncId}. Repairing.`);
+        state = repairSaveState(data);
+        tx.set(saveRef, state, { merge: true });
+      } else {
+        state = data;
+      }
     }
     const now = Date.now();
     const minIntervalMs = 1000;
@@ -680,7 +737,14 @@ async function claimReactorContribute(
       state = createDefaultSave();
       tx.set(saveRef, state);
     } else {
-      state = saveSnap.data()!;
+      const data = saveSnap.data()!;
+      if (!isValidFullState(data)) {
+        console.error(`[claimReactorContribute] Corrupt or incomplete save for syncId: ${syncId}. Repairing.`);
+        state = repairSaveState(data);
+        tx.set(saveRef, state, { merge: true });
+      } else {
+        state = data;
+      }
     }
 
     const now = Date.now();
@@ -1415,17 +1479,11 @@ async function claimStartExpedition(db: Firestore, syncId: string, zoneId: strin
 async function markWelcomeSeen(db: Firestore, syncId: string): Promise<Record<string, any>> {
   const saveRef = db.collection('saves').doc(syncId);
   return await db.runTransaction(async (tx) => {
-    const snap = await tx.get(saveRef);
-    let state: Record<string, any>;
-    if (!snap.exists) {
-      state = createDefaultSave();
-    } else {
-      state = snap.data()!;
-    }
+    const { state } = await getOrCreateSaveState(tx, saveRef);
     state.hasSeenWelcome = true;
     state.lastUpdated = Date.now();
     state.rev = (state.rev || 0) + 1;
-    tx.set(saveRef, state);
+    tx.set(saveRef, state, { merge: true });
     return state;
   });
 }

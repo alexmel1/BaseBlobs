@@ -53,7 +53,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { WelcomeModal } from './components/WelcomeModal';
 import { TRAITS, TRAIT_KEYS } from './data';
 import { playExpeditionCompleteSound, playLevelUpSound } from './utils/audio';
-import { saveGameState, loadGameState, isOfflineError, subscribeToGameState, RevConflictError } from './lib/syncService';
+import { saveGameState, loadGameState, isOfflineError, subscribeToGameState, RevConflictError, isValidFullState } from './lib/syncService';
 import { useReactor } from './hooks/useReactor';
 import { useArena } from './hooks/useArena';
 import { ArenaScreen } from './components/ArenaScreen';
@@ -207,6 +207,10 @@ async function saveWithRetry(
   expectedRev: number,
   maxAttempts: number = 3
 ): Promise<number> {
+  if (!isValidFullState(state)) {
+    console.warn('[saveWithRetry] Skipping save: state is invalid or missing required fields', state);
+    return expectedRev;
+  }
   let lastError: any;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -533,6 +537,11 @@ export default function App() {
   useEffect(() => {
     if (!syncId || !hasLoadedCloud) return;
 
+    if (!isValidFullState(state)) {
+      console.warn('[Auto-Save] Skipping auto-save because state is invalid or missing required fields', state);
+      return;
+    }
+
     const timer = setTimeout(async () => {
       try {
         setIsCloudSyncing(true);
@@ -629,7 +638,7 @@ export default function App() {
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
         checkServerStatus();
-      } else if (document.visibilityState === 'hidden' && stateRef.current && hasLoadedCloud) {
+      } else if (document.visibilityState === 'hidden' && stateRef.current && hasLoadedCloud && isValidFullState(stateRef.current)) {
         saveWithRetry(syncId, stateRef.current, revRef.current)
           .then((newRev) => {
             revRef.current = newRev;

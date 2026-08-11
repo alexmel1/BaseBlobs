@@ -46,6 +46,21 @@ export class RevConflictError extends Error {
 }
 
 /**
+ * Validates if state has all required progression fields.
+ */
+export function isValidFullState(s: any): boolean {
+  return (
+    s &&
+    Array.isArray(s.blobs) &&
+    s.blobs.length > 0 &&
+    typeof s.cubes === 'number' &&
+    typeof s.energy === 'number' &&
+    typeof s.selectedId === 'string' &&
+    s.initialized === true
+  );
+}
+
+/**
  * Saves game state to Firestore only if expectedRev matches cloud state rev.
  * Returns the new revision number on success.
  */
@@ -55,6 +70,11 @@ export async function saveGameState(
   expectedRev: number = 0
 ): Promise<number> {
   if (!identifier) return expectedRev;
+
+  if (!isValidFullState(state)) {
+    console.warn('[saveGameState] Refusing to save invalid or incomplete state to Cloud:', state);
+    return expectedRev;
+  }
 
   const docId = identifier.trim().toLowerCase();
   const docRef = doc(db, 'saves', docId);
@@ -74,13 +94,9 @@ export async function saveGameState(
       let payload: Record<string, any>;
 
       if (!snap.exists()) {
-        // Initial creation of document for a new wallet save:
-        // Client writes cosmetic fields; server Admin SDK initializes full progression state on /api/status.
+        // Initial creation of document for a new wallet save
         payload = {
-          playerName: state.playerName || 'Trainer',
-          selectedId: state.selectedId || 'b1',
-          expPickId: state.expPickId || 'b1',
-          expPickIds: state.expPickIds || ['b1'],
+          ...state,
           rev: nextRev,
           lastUpdated: Date.now(),
         };
