@@ -365,6 +365,15 @@ export default function App() {
     stateRef.current = state;
   }, [state]);
 
+  const walletAddressRef = React.useRef(rawWalletAddress);
+  const syncIdRef = React.useRef(syncId);
+  useEffect(() => {
+    walletAddressRef.current = rawWalletAddress;
+  }, [rawWalletAddress]);
+  useEffect(() => {
+    syncIdRef.current = syncId;
+  }, [syncId]);
+
   const revRef = React.useRef<number>(0);
   const lastProcessedAddressRef = React.useRef<string | null>(null);
 
@@ -441,6 +450,37 @@ export default function App() {
     }
   };
 
+  // Self-heal finished expeditions on load / state sync
+  const selfHealExpeditionsIfNeeded = React.useCallback((s: GameState) => {
+    const currentSync = syncIdRef.current;
+    const currentWallet = walletAddressRef.current;
+    if (!currentSync || !currentWallet) return;
+
+    const exps = s.activeExpeditions || (s.activeExpedition ? [s.activeExpedition] : []);
+    const hasFinished = exps.some((exp: any) => exp && exp.endTime && Date.now() >= exp.endTime);
+
+    if (hasFinished && hasValidSession(currentWallet)) {
+      fetchWithSession('/api/claim', {
+        type: 'status',
+        syncId: currentSync,
+        walletAddress: currentWallet,
+      }, { interactive: false })
+        .then(async (res) => {
+          if (!res) return;
+          const data = await res.json();
+          const serverState = data.state || data;
+          if (res.ok && serverState && serverState.initialized) {
+            const validated = validateAndMigrateState(serverState);
+            syncAndSetState(validated);
+            revRef.current = serverState.rev ?? revRef.current;
+          }
+        })
+        .catch((err) => {
+          console.warn('Self-heal expedition claim failed:', err);
+        });
+    }
+  }, []);
+
   // ☁️ Cloud Sync hook: Always prioritize wallet's cloud save on Firestore when connected
   useEffect(() => {
     if (!syncId) {
@@ -464,6 +504,7 @@ export default function App() {
             setHasLoadedCloud(true);
             setIsSwitchingWallet(false);
             triggerToast('Cloud save loaded! Progress synced.');
+            selfHealExpeditionsIfNeeded(validated);
           }
         } else {
           // New wallet save initialization with clean default state created by server Admin SDK
@@ -477,6 +518,7 @@ export default function App() {
               const validated = validateAndMigrateState(newCloudState);
               syncAndSetState(validated);
               revRef.current = validated.rev ?? 0;
+              selfHealExpeditionsIfNeeded(validated);
             }
             setHasLoadedCloud(true);
             setIsSwitchingWallet(false);
@@ -491,6 +533,7 @@ export default function App() {
             revRef.current = e.cloudState.rev ?? revRef.current;
             setHasLoadedCloud(true);
             setIsSwitchingWallet(false);
+            selfHealExpeditionsIfNeeded(validated);
           }
         } else {
           if (!isOfflineError(e)) {
@@ -520,6 +563,7 @@ export default function App() {
             revRef.current = remoteRev;
             setHasLoadedCloud(true);
             setIsSwitchingWallet(false);
+            selfHealExpeditionsIfNeeded(validated);
           }
         });
       }
@@ -768,6 +812,13 @@ export default function App() {
     return [getExpPickBlob()];
   };
 
+  // Self-heal check on load or wallet change
+  useEffect(() => {
+    if (hasLoadedCloud && state) {
+      selfHealExpeditionsIfNeeded(state);
+    }
+  }, [hasLoadedCloud, rawWalletAddress, selfHealExpeditionsIfNeeded]);
+
   // Main game tick: Runs every second
   useEffect(() => {
     const interval = setInterval(() => {
@@ -826,20 +877,23 @@ export default function App() {
               const activeIds = exp.blobIds || (exp.blobId ? [exp.blobId] : []);
               const primaryBlobId = activeIds[0];
 
+              const currentSyncId = syncIdRef.current;
+              const currentWalletAddress = walletAddressRef.current;
+
               // Request server-side claim if not already in-flight and valid session exists
               if (
-                syncId &&
-                rawWalletAddress &&
+                currentSyncId &&
+                currentWalletAddress &&
                 primaryBlobId &&
-                hasValidSession(rawWalletAddress) &&
+                hasValidSession(currentWalletAddress) &&
                 !inFlightExpeditionClaimsRef.current.has(primaryBlobId)
               ) {
                 inFlightExpeditionClaimsRef.current.add(primaryBlobId);
 
                 fetchWithSession('/api/claim', {
                   type: 'expedition',
-                  syncId,
-                  walletAddress: rawWalletAddress,
+                  syncId: currentSyncId,
+                  walletAddress: currentWalletAddress,
                   blobId: primaryBlobId,
                 })
                   .then(async (res) => {
