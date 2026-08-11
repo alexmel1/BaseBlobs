@@ -101,6 +101,7 @@ export function createDefaultSave(): Record<string, any> {
     lastArenaRewardClaimed: false,
     hasOGBadge: false,
     ogBadgePurchasedAt: null,
+    hasSeenWelcome: false,
     initialized: true,
     rev: 1,
     lastUpdated: Date.now(),
@@ -199,6 +200,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       return res.status(200).json({ status: 'ok', state });
+    }
+
+    if (type === 'mark_welcome_seen') {
+      const updatedState = await markWelcomeSeen(db, syncId);
+      return res.status(200).json(updatedState);
     }
 
     if (type === 'expedition') {
@@ -1405,3 +1411,22 @@ async function claimStartExpedition(db: Firestore, syncId: string, zoneId: strin
     };
   });
 }
+
+async function markWelcomeSeen(db: Firestore, syncId: string): Promise<Record<string, any>> {
+  const saveRef = db.collection('saves').doc(syncId);
+  return await db.runTransaction(async (tx) => {
+    const snap = await tx.get(saveRef);
+    let state: Record<string, any>;
+    if (!snap.exists) {
+      state = createDefaultSave();
+    } else {
+      state = snap.data()!;
+    }
+    state.hasSeenWelcome = true;
+    state.lastUpdated = Date.now();
+    state.rev = (state.rev || 0) + 1;
+    tx.set(saveRef, state);
+    return state;
+  });
+}
+

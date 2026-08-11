@@ -70,7 +70,7 @@ export const ZONES: Zone[] = [
     id: 'fields',
     tier: 1,
     icon: '🌱',
-    name: 'Base Fields',
+    name: 'Genesis Fields',
     sub: 'Calm starter plains',
     cost: 10,
     reward: [20, 50],
@@ -83,7 +83,7 @@ export const ZONES: Zone[] = [
     id: 'cave',
     tier: 2,
     icon: '💠',
-    name: 'Cube Cave',
+    name: 'Stablecoin Shores',
     sub: 'Glowing crystal caverns',
     cost: 15,
     reward: [60, 110],
@@ -96,7 +96,7 @@ export const ZONES: Zone[] = [
     id: 'forest',
     tier: 3,
     icon: '🌲',
-    name: 'Signal Forest',
+    name: 'Mempool Thicket',
     sub: 'Digital neon wilderness',
     cost: 20,
     reward: [100, 170],
@@ -109,7 +109,7 @@ export const ZONES: Zone[] = [
     id: 'volcano',
     tier: 4,
     icon: '🌋',
-    name: 'Neon Volcano',
+    name: 'Block Foundry',
     sub: 'Scorching magma circuits',
     cost: 25,
     reward: [170, 280],
@@ -122,7 +122,7 @@ export const ZONES: Zone[] = [
     id: 'void',
     tier: 5,
     icon: '🌌',
-    name: 'Void Network',
+    name: 'Terminal Block',
     sub: 'Glitch dimension, high risk',
     cost: 30,
     reward: [270, 430],
@@ -681,6 +681,7 @@ export const DEFAULT_GAMESTATE_NEW_FIELDS = {
   lastArenaProcessedWeek: null,
   lastArenaRank: null,
   lastArenaRewardClaimed: false,
+  hasSeenWelcome: false,
 };
 
 // ─── LEVEL LORE MILESTONES ────────────────────────────────
@@ -799,10 +800,10 @@ export const ARENA_CONFIG = {
   critMult: 1.6,
   /** Кубы за матч по счёту */
   rewards: {
-    '3:0': 250,
-    '2:1': 180,
-    '1:2': 60,
-    '0:3': 30,
+    '3:0': 100,
+    '2:1': 50,
+    '1:2': 25,
+    '0:3': 0,
   } as Record<string, number>,
 } as const;
 

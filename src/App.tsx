@@ -50,6 +50,7 @@ import { SummonModal } from './components/SummonModal';
 import { NetworkMap } from './components/NetworkMap';
 import { useNetworkMap } from './hooks/useNetworkMap';
 import { ProfileModal } from './components/ProfileModal';
+import { WelcomeModal } from './components/WelcomeModal';
 import { TRAITS, TRAIT_KEYS } from './data';
 import { playExpeditionCompleteSound, playLevelUpSound } from './utils/audio';
 import { saveGameState, loadGameState, isOfflineError, subscribeToGameState, RevConflictError } from './lib/syncService';
@@ -183,6 +184,7 @@ export function validateAndMigrateState(parsed: any): GameState {
     totalExpeditionsAllTime: typeof parsed.totalExpeditionsAllTime === 'number' ? parsed.totalExpeditionsAllTime : 0,
     hasOGBadge: Boolean(parsed.hasOGBadge),
     ogBadgePurchasedAt: parsed.ogBadgePurchasedAt || null,
+    hasSeenWelcome: Boolean(parsed.hasSeenWelcome),
     arenaRegisteredBlobId: parsed.arenaRegisteredBlobId || null,
     // Отряд арены: без переноса он терялся бы на каждом ответе сервера,
     // т.к. миграция собирает стейт по явному списку полей.
@@ -235,6 +237,9 @@ export default function App() {
 
   // Name Modal State
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
+
+  // Welcome Modal State
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
 
   // Wallet Modal State
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -641,6 +646,38 @@ export default function App() {
     };
   }, [syncId, rawWalletAddress, hasLoadedCloud, checkServerStatus]);
 
+  // 🌟 Auto-show Welcome Modal on initial wallet connect
+  useEffect(() => {
+    if (rawWalletAddress && hasLoadedCloud && !state.hasSeenWelcome) {
+      setIsWelcomeModalOpen(true);
+    }
+  }, [rawWalletAddress, hasLoadedCloud, state.hasSeenWelcome]);
+
+  const handleMarkWelcomeSeen = async () => {
+    setIsWelcomeModalOpen(false);
+    updateState((prev) => {
+      prev.hasSeenWelcome = true;
+      return prev;
+    });
+
+    if (rawWalletAddress && syncId) {
+      try {
+        const res = await fetchWithSession('/api/claim', {
+          type: 'mark_welcome_seen',
+          syncId,
+          walletAddress: rawWalletAddress,
+        }, { interactive: false });
+        const updated = await res.json();
+        if (res.ok && updated) {
+          const validated = validateAndMigrateState(updated);
+          syncAndSetState(validated);
+        }
+      } catch (err) {
+        console.error('Failed to mark welcome seen on server:', err);
+      }
+    }
+  };
+
   // Track in-flight server expedition claims to avoid duplicate fetches
   const inFlightExpeditionClaimsRef = React.useRef<Set<string>>(new Set());
   
@@ -868,7 +905,11 @@ export default function App() {
           syncAndSetState(validateAndMigrateState(JSON.parse(localSaveForNewWallet)));
         } catch (e) {
           // Let cloud load handle state hydration
+          syncAndSetState({ ...getDefaultState(), initialized: true });
         }
+      } else {
+        // Reset state to clean default so previous wallet data is not displayed
+        syncAndSetState({ ...getDefaultState(), initialized: true });
       }
 
       setHasLoadedCloud(false);
@@ -886,13 +927,36 @@ export default function App() {
     setIsWalletModalOpen(false);
   }, [syncId, triggerToast]);
 
-  // React to Wagmi account state changes
+  // React to Wagmi account state changes (connect & disconnect via AppKit UI)
   useEffect(() => {
-    if (isWagmiConnected && wagmiAddress && lastProcessedAddressRef.current !== wagmiAddress) {
-      lastProcessedAddressRef.current = wagmiAddress;
-      processConnection(wagmiAddress);
+    if (isWagmiConnected && wagmiAddress) {
+      if (lastProcessedAddressRef.current !== wagmiAddress) {
+        lastProcessedAddressRef.current = wagmiAddress;
+        processConnection(wagmiAddress);
+      }
+    } else if (!isWagmiConnected) {
+      if (lastProcessedAddressRef.current !== null) {
+        lastProcessedAddressRef.current = null;
+        setWalletAddress(null);
+        setRawWalletAddress(null);
+        setSyncId(null);
+        setHasLoadedCloud(false);
+        setIsCloudSyncing(false);
+        sessionExpiredNoticeRef.current = false;
+
+        if (rawWalletAddress) {
+          clearSessionToken(rawWalletAddress);
+        }
+
+        localStorage.removeItem('bb_formatted_wallet');
+        localStorage.removeItem('bb_raw_wallet');
+        localStorage.removeItem('bb_sync_id');
+
+        setIsWalletModalOpen(false);
+        triggerToast('Wallet disconnected. Please connect a wallet to play.');
+      }
     }
-  }, [isWagmiConnected, wagmiAddress, processConnection]);
+  }, [isWagmiConnected, wagmiAddress, processConnection, rawWalletAddress, triggerToast]);
 
   const handleConnectWalletType = async (type?: 'base' | 'metamask', address?: string) => {
     if (address) {
@@ -2909,6 +2973,13 @@ export default function App() {
         rawWalletAddress={rawWalletAddress}
         triggerToast={triggerToast}
         updateState={updateState}
+      />
+
+      {/* Welcome Modal */}
+      <WelcomeModal
+        isOpen={isWelcomeModalOpen}
+        onClose={handleMarkWelcomeSeen}
+        blob={getSelectedBlob()}
       />
 
 

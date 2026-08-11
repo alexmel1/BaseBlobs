@@ -136,6 +136,7 @@ export interface GameState {
   totalExpeditionsAllTime: number;
   hasOGBadge: boolean;
   ogBadgePurchasedAt: number | null;
+  hasSeenWelcome?: boolean;
   initialized: boolean;
   // Weekly Arena
   /** @deprecated одиночный боец от прошлой идеи арены. Не использовать — см. arenaSquadIds */
