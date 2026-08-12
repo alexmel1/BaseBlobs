@@ -50,7 +50,6 @@ import { SummonModal } from './components/SummonModal';
 import { NetworkMap } from './components/NetworkMap';
 import { useNetworkMap } from './hooks/useNetworkMap';
 import { ProfileModal } from './components/ProfileModal';
-import { WelcomeModal } from './components/WelcomeModal';
 import { TRAITS, TRAIT_KEYS } from './data';
 import { playExpeditionCompleteSound, playLevelUpSound } from './utils/audio';
 import { saveGameState, loadGameState, isOfflineError, subscribeToGameState, RevConflictError, isValidFullState } from './lib/syncService';
@@ -242,9 +241,6 @@ export default function App() {
   // Name Modal State
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
 
-  // Welcome Modal State
-  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
-
   // Wallet Modal State
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [initialConnectType, setInitialConnectType] = useState<'base' | 'metamask' | null>(null);
@@ -347,16 +343,6 @@ export default function App() {
 
   // Main Game State
   const [state, setState] = useState<GameState>(() => {
-    try {
-      const saved = localStorage.getItem('bb_v6');
-      if (saved) {
-        return validateAndMigrateState(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.error('Failed to load localStorage', e);
-    }
-
-    // Default State
     return { ...getDefaultState(), initialized: true };
   });
 
@@ -519,6 +505,8 @@ export default function App() {
               syncAndSetState(validated);
               revRef.current = validated.rev ?? 0;
               selfHealExpeditionsIfNeeded(validated);
+            } else {
+              syncAndSetState({ ...getDefaultState(), initialized: true });
             }
             setHasLoadedCloud(true);
             setIsSwitchingWallet(false);
@@ -715,38 +703,6 @@ export default function App() {
       window.removeEventListener('beforeunload', handleVisibilityOrFocus);
     };
   }, [syncId, rawWalletAddress, hasLoadedCloud, checkServerStatus]);
-
-  // 🌟 Auto-show Welcome Modal on initial wallet connect
-  useEffect(() => {
-    if (rawWalletAddress && hasLoadedCloud && !isSwitchingWallet && !state.hasSeenWelcome) {
-      setIsWelcomeModalOpen(true);
-    }
-  }, [rawWalletAddress, hasLoadedCloud, isSwitchingWallet, state.hasSeenWelcome]);
-
-  const handleMarkWelcomeSeen = async () => {
-    setIsWelcomeModalOpen(false);
-    updateState((prev) => {
-      prev.hasSeenWelcome = true;
-      return prev;
-    });
-
-    if (rawWalletAddress && syncId) {
-      try {
-        const res = await fetchWithSession('/api/claim', {
-          type: 'mark_welcome_seen',
-          syncId,
-          walletAddress: rawWalletAddress,
-        }, { interactive: false });
-        const updated = await res.json();
-        if (res.ok && updated) {
-          const validated = validateAndMigrateState(updated);
-          syncAndSetState(validated);
-        }
-      } catch (err) {
-        console.error('Failed to mark welcome seen on server:', err);
-      }
-    }
-  };
 
   // Track in-flight server expedition claims to avoid duplicate fetches
   const inFlightExpeditionClaimsRef = React.useRef<Set<string>>(new Set());
@@ -3059,15 +3015,6 @@ export default function App() {
         triggerToast={triggerToast}
         updateState={updateState}
       />
-
-      {/* Welcome Modal */}
-      <WelcomeModal
-        isOpen={isWelcomeModalOpen}
-        onClose={handleMarkWelcomeSeen}
-        blob={getSelectedBlob()}
-      />
-
-
 
       {showProfileModal && (
         <ProfileModal

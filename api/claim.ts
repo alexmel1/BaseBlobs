@@ -50,6 +50,15 @@ function getAdminDb(): Firestore {
   return db;
 }
 
+export function calcNextExpeditionEndTime(expeditions: any[]): number | null {
+  if (!Array.isArray(expeditions) || expeditions.length === 0) return null;
+  const validEndTimes = expeditions
+    .map((e) => e?.endTime)
+    .filter((t): t is number => typeof t === 'number' && Number.isFinite(t));
+  if (validEndTimes.length === 0) return null;
+  return Math.min(...validEndTimes);
+}
+
 export function createDefaultSave(): Record<string, any> {
   const initialBranches = rollBlobBranches();
   return {
@@ -87,6 +96,7 @@ export function createDefaultSave(): Record<string, any> {
     nextId: 2,
     activeExpedition: null,
     activeExpeditions: [],
+    nextExpeditionEndTime: null,
     verifiedTxHashes: [],
     blobCharms: 0,
     lastExpeditionEvent: null,
@@ -122,6 +132,11 @@ export function isValidFullState(s: any): boolean {
 export function repairSaveState(data: any): Record<string, any> {
   const defaultSave = createDefaultSave();
   const repaired = { ...defaultSave, ...data };
+
+  if (repaired.nextExpeditionEndTime === undefined) {
+    const exps = repaired.activeExpeditions || (repaired.activeExpedition ? [repaired.activeExpedition] : []);
+    repaired.nextExpeditionEndTime = calcNextExpeditionEndTime(exps);
+  }
 
   if (!Array.isArray(repaired.blobs) || repaired.blobs.length === 0) {
     repaired.blobs = defaultSave.blobs;
@@ -368,6 +383,123 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+export function processExpeditionCompletion(state: Record<string, any>, exp: any, now: number) {
+  const zone = ZONES.find((z) => z.id === exp.zoneId);
+  if (!zone) throw new Error('Unknown expedition zone');
+
+  const activeBlobIds: string[] = exp.blobIds || [exp.blobId];
+  const activeBlobs = (state.blobs || []).filter((b: any) => activeBlobIds.includes(b.id));
+  if (!activeBlobs.length) throw new Error('Expedition blob not found');
+
+  const baseReward = Math.round(zone.reward[0] + Math.random() * (zone.reward[1] - zone.reward[0]));
+  let xpGain = zone.xp;
+
+  const maxHarvestLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.harvest || 0), 0);
+  const maxFortuneLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.fortune || 0), 0);
+  const maxInsightLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.insight || 0), 0);
+
+  const statsList = activeBlobs.map((b: any) => getBlobStats(b.personality, b.level));
+  const avgLuck = statsList.reduce((acc: number, s: any) => acc + s.luck, 0) / statsList.length;
+
+  const fakeUpgrades = {
+    speed: 0,
+    harvest: maxHarvestLevel,
+    fortune: maxFortuneLevel,
+    insight: maxInsightLevel,
+  };
+  const { reward: upgradedReward, bonusChance, xpMult } = applyUpgrades(baseReward, 0, 0.30, fakeUpgrades);
+  let reward = upgradedReward;
+
+  // Insight — новая ветка: больше опыта за экспедицию
+  xpGain = Math.round(xpGain * xpMult);
+
+  // Поиск по id, а не по индексу UPGRADES: добавление новых веток
+  // не должно молча сдвигать расчёт fortune.
+  const fortuneBonus = getUpgradeValue('fortune', maxFortuneLevel, 0);
+  const luckCritChance = Math.min(0.50, avgLuck * 0.0015 + fortuneBonus);
+  if (Math.random() < luckCritChance) {
+    reward = reward * 2;
+  }
+
+  const hasLucky = activeBlobs.some((b: any) => b.personality === 'lucky');
+  const hasCosmicHighLv = activeBlobs.some((b: any) => b.personality === 'cosmic' && b.level >= 10);
+  const hasChaotic = activeBlobs.some((b: any) => b.personality === 'chaotic');
+
+  if (hasLucky) reward = Math.round(reward * 1.15);
+  if (hasCosmicHighLv) reward = Math.round(reward * 1.25);
+  if (hasChaotic && Math.random() < bonusChance) {
+    reward = Math.round(reward * 1.5);
+  }
+
+  const event = rollExpeditionEvent();
+  reward = Math.round(reward * event.cubeMultiplier);
+  xpGain = Math.round(xpGain * event.xpMultiplier);
+
+  if (exp.charmActive) {
+    reward = Math.round(reward * 2);
+  }
+
+  let blobCharms = state.blobCharms || 0;
+  if (event.bonusItem === 'blob_charm') {
+    blobCharms += 1;
+  }
+
+  const newCubes = (state.cubes || 0) + reward;
+  const totalCubesAllTime = (state.totalCubesAllTime || 0) + reward;
+  const totalExpeditionsAllTime = (state.totalExpeditionsAllTime || 0) + 1;
+  const cubesCollectedToday = (state.cubesCollectedToday || 0) + reward;
+  const expeditionsToday = (state.expeditionsToday || 0) + 1;
+
+  const updatedBlobs = (state.blobs || []).map((blob: any) => {
+    if (!activeBlobIds.includes(blob.id)) return blob;
+
+    let blobXpGain = xpGain;
+    if (blob.personality === 'happy') blobXpGain = Math.round(blobXpGain * 1.2);
+
+    let currentXp = (blob.xp ?? blob.experience ?? 0) + blobXpGain;
+    let currentLevel = blob.level || 1;
+
+    while (currentXp >= XP4LV(currentLevel) && currentLevel < 20) {
+      currentXp -= XP4LV(currentLevel);
+      currentLevel++;
+    }
+
+    return {
+      ...blob,
+      xp: currentXp,
+      level: currentLevel,
+      totalExpeditions: (blob.totalExpeditions || 0) + 1,
+      totalCubesEarned: (blob.totalCubesEarned || 0) + reward,
+    };
+  });
+
+  const expeditions: any[] = state.activeExpeditions || (state.activeExpedition ? [state.activeExpedition] : []);
+  const remainingExpeditions = expeditions.filter((e) => e !== exp);
+  const nextExpeditionEndTime = calcNextExpeditionEndTime(remainingExpeditions);
+  const newRev = (state.rev || 0) + 1;
+
+  const updatePayload = {
+    cubes: newCubes,
+    totalCubesAllTime,
+    totalExpeditionsAllTime,
+    cubesCollectedToday,
+    expeditionsToday,
+    blobCharms,
+    lastExpeditionEvent: event,
+    activeExpeditions: remainingExpeditions,
+    activeExpedition: null,
+    nextExpeditionEndTime,
+    blobs: updatedBlobs,
+    rev: newRev,
+    lastUpdated: now,
+  };
+
+  return {
+    ...state,
+    ...updatePayload,
+  };
+}
+
 async function claimExpedition(db: Firestore, syncId: string, blobId: string) {
   const saveRef = db.collection('saves').doc(syncId);
 
@@ -390,119 +522,27 @@ async function claimExpedition(db: Firestore, syncId: string, blobId: string) {
       throw new Error('Expedition is not finished yet');
     }
 
-    const zone = ZONES.find((z) => z.id === exp.zoneId);
-    if (!zone) throw new Error('Unknown expedition zone');
-
-    const activeBlobIds: string[] = exp.blobIds || [exp.blobId || blobId];
-    const activeBlobs = (state.blobs || []).filter((b: any) => activeBlobIds.includes(b.id));
-    if (!activeBlobs.length) throw new Error('Expedition blob not found');
-
-    const baseReward = Math.round(zone.reward[0] + Math.random() * (zone.reward[1] - zone.reward[0]));
-    let xpGain = zone.xp;
-
-    const maxHarvestLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.harvest || 0), 0);
-    const maxFortuneLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.fortune || 0), 0);
-    const maxInsightLevel = activeBlobs.reduce((max: number, b: any) => Math.max(max, b.upgrades?.insight || 0), 0);
-
-    const statsList = activeBlobs.map((b: any) => getBlobStats(b.personality, b.level));
-    const avgLuck = statsList.reduce((acc: number, s: any) => acc + s.luck, 0) / statsList.length;
-
-    const fakeUpgrades = {
-      speed: 0,
-      harvest: maxHarvestLevel,
-      fortune: maxFortuneLevel,
-      insight: maxInsightLevel,
-    };
-    const { reward: upgradedReward, bonusChance, xpMult } = applyUpgrades(baseReward, 0, 0.30, fakeUpgrades);
-    let reward = upgradedReward;
-
-    // Insight — новая ветка: больше опыта за экспедицию
-    xpGain = Math.round(xpGain * xpMult);
-
-    // Поиск по id, а не по индексу UPGRADES: добавление новых веток
-    // не должно молча сдвигать расчёт fortune.
-    const fortuneBonus = getUpgradeValue('fortune', maxFortuneLevel, 0);
-    const luckCritChance = Math.min(0.50, avgLuck * 0.0015 + fortuneBonus);
-    if (Math.random() < luckCritChance) {
-      reward = reward * 2;
-    }
-
-    const hasLucky = activeBlobs.some((b: any) => b.personality === 'lucky');
-    const hasCosmicHighLv = activeBlobs.some((b: any) => b.personality === 'cosmic' && b.level >= 10);
-    const hasChaotic = activeBlobs.some((b: any) => b.personality === 'chaotic');
-
-    if (hasLucky) reward = Math.round(reward * 1.15);
-    if (hasCosmicHighLv) reward = Math.round(reward * 1.25);
-    if (hasChaotic && Math.random() < bonusChance) {
-      reward = Math.round(reward * 1.5);
-    }
-
-    const event = rollExpeditionEvent();
-    reward = Math.round(reward * event.cubeMultiplier);
-    xpGain = Math.round(xpGain * event.xpMultiplier);
-
-    if (exp.charmActive) {
-      reward = Math.round(reward * 2);
-    }
-
-    let blobCharms = state.blobCharms || 0;
-    if (event.bonusItem === 'blob_charm') {
-      blobCharms += 1;
-    }
-
-    const newCubes = (state.cubes || 0) + reward;
-    const totalCubesAllTime = (state.totalCubesAllTime || 0) + reward;
-    const totalExpeditionsAllTime = (state.totalExpeditionsAllTime || 0) + 1;
-    const cubesCollectedToday = (state.cubesCollectedToday || 0) + reward;
-    const expeditionsToday = (state.expeditionsToday || 0) + 1;
-
-    const updatedBlobs = (state.blobs || []).map((blob: any) => {
-      if (!activeBlobIds.includes(blob.id)) return blob;
-
-      let blobXpGain = xpGain;
-      if (blob.personality === 'happy') blobXpGain = Math.round(blobXpGain * 1.2);
-
-      let currentXp = (blob.xp ?? blob.experience ?? 0) + blobXpGain;
-      let currentLevel = blob.level || 1;
-
-      while (currentXp >= XP4LV(currentLevel) && currentLevel < 20) {
-        currentXp -= XP4LV(currentLevel);
-        currentLevel++;
-      }
-
-      return {
-        ...blob,
-        xp: currentXp,
-        level: currentLevel,
-        totalExpeditions: (blob.totalExpeditions || 0) + 1,
-        totalCubesEarned: (blob.totalCubesEarned || 0) + reward,
-      };
-    });
-
-    const remainingExpeditions = expeditions.filter((e) => e !== exp);
-    const newRev = (state.rev || 0) + 1;
+    const updatedState = processExpeditionCompletion(state, exp, now);
 
     const updatePayload = {
-      cubes: newCubes,
-      totalCubesAllTime,
-      totalExpeditionsAllTime,
-      cubesCollectedToday,
-      expeditionsToday,
-      blobCharms,
-      lastExpeditionEvent: event,
-      activeExpeditions: remainingExpeditions,
-      activeExpedition: null,
-      blobs: updatedBlobs,
-      rev: newRev,
-      lastUpdated: now,
+      cubes: updatedState.cubes,
+      totalCubesAllTime: updatedState.totalCubesAllTime,
+      totalExpeditionsAllTime: updatedState.totalExpeditionsAllTime,
+      cubesCollectedToday: updatedState.cubesCollectedToday,
+      expeditionsToday: updatedState.expeditionsToday,
+      blobCharms: updatedState.blobCharms,
+      lastExpeditionEvent: updatedState.lastExpeditionEvent,
+      activeExpeditions: updatedState.activeExpeditions,
+      activeExpedition: updatedState.activeExpedition,
+      nextExpeditionEndTime: updatedState.nextExpeditionEndTime,
+      blobs: updatedState.blobs,
+      rev: updatedState.rev,
+      lastUpdated: updatedState.lastUpdated,
     };
 
     tx.update(saveRef, updatePayload);
 
-    return {
-      ...state,
-      ...updatePayload,
-    };
+    return updatedState;
   });
 }
 
@@ -1448,6 +1488,7 @@ async function claimStartExpedition(db: Firestore, syncId: string, zoneId: strin
     };
 
     const updatedActiveExpeditions = [...activeExpeditionsList, newExp];
+    const nextExpeditionEndTime = calcNextExpeditionEndTime(updatedActiveExpeditions);
 
     const questDone = { ...(state.questDone || {}) };
     if (!questDone.sends && sendsToday >= 3) {
@@ -1462,6 +1503,7 @@ async function claimStartExpedition(db: Firestore, syncId: string, zoneId: strin
       sendsToday,
       blobCharms,
       activeExpeditions: updatedActiveExpeditions,
+      nextExpeditionEndTime,
       questDone,
       rev: newRev,
       lastUpdated: now,
