@@ -6,7 +6,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, X, Atom, Loader2, Code, Database, Coins } from 'lucide-react';
-import { writeContract, waitForTransactionReceipt } from 'wagmi/actions';
+import { waitForTransactionReceipt } from 'wagmi/actions';
+import { encodeFunctionData } from 'viem';
+import { sendTransactionWithBuilderCode } from '../lib/builderCode';
 import { base } from '@reown/appkit/networks';
 import { wagmiConfig } from '../lib/web3Config';
 import { TREASURY_ADDRESS, SUMMON_USDC_PRICE, USDC_ADDRESS } from '../contracts/reactorConfig';
@@ -164,13 +166,17 @@ export const SummonModal: React.FC<SummonModalProps> = ({
         throw new Error('Please switch your wallet network to Base L2');
       }
 
-      const hash = await writeContract(wagmiConfig, {
-        address: USDC_ADDRESS as `0x${string}`,
+      const transferCalldata = encodeFunctionData({
         abi: ERC20_TRANSFER_ABI,
         functionName: 'transfer',
         args: [TREASURY_ADDRESS as `0x${string}`, BigInt(SUMMON_USDC_PRICE)],
-        chain: base,
+      });
+
+      const hash = await sendTransactionWithBuilderCode(wagmiConfig, {
         account: rawWalletAddress as `0x${string}`,
+        chainId: base.id,
+        to: USDC_ADDRESS as `0x${string}`,
+        data: transferCalldata,
       });
 
       await waitForTransactionReceipt(wagmiConfig, { hash });

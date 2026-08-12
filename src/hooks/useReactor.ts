@@ -3,7 +3,9 @@ import {
   doc, onSnapshot, updateDoc, setDoc, increment, getDoc, collection, getDocs, writeBatch,
 } from 'firebase/firestore';
 import { ethers } from 'ethers';
-import { writeContract, waitForTransactionReceipt } from 'wagmi/actions';
+import { waitForTransactionReceipt } from 'wagmi/actions';
+import { encodeFunctionData } from 'viem';
+import { sendTransactionWithBuilderCode } from '../lib/builderCode';
 import { wagmiConfig } from '../lib/web3Config';
 import { base } from '@reown/appkit/networks';
 import { StandardMerkleTree } from '@openzeppelin/merkle-tree';
@@ -523,14 +525,17 @@ export function useReactor(
         return false;
       }
 
-      // Send the transaction (eventId, amountWei, proof) via wagmi writeContract
-      const hash = await writeContract(wagmiConfig, {
-        address: REACTOR_ADDRESS as `0x${string}`,
+      const claimCalldata = encodeFunctionData({
         abi: BLOB_REACTOR_ABI as any,
         functionName: 'claim',
         args: [BigInt(currentEvId), BigInt(allocationWei), proof as `0x${string}`[]],
-        chain: base,
+      });
+
+      const hash = await sendTransactionWithBuilderCode(wagmiConfig, {
         account: rawWalletAddress as `0x${string}`,
+        chainId: base.id,
+        to: REACTOR_ADDRESS as `0x${string}`,
+        data: claimCalldata,
       });
       setClaimTxHash(hash);
       await waitForTransactionReceipt(wagmiConfig, { hash });
@@ -652,13 +657,17 @@ export function useReactor(
         return false;
       }
 
-      const hash = await writeContract(wagmiConfig, {
-        address: REACTOR_ADDRESS as `0x${string}`,
+      const claimCalldata = encodeFunctionData({
         abi: BLOB_REACTOR_ABI as any,
         functionName: 'claim',
         args: [BigInt(reward.eventId), BigInt(reward.allocationWei), reward.proof as `0x${string}`[]],
-        chain: base,
+      });
+
+      const hash = await sendTransactionWithBuilderCode(wagmiConfig, {
         account: rawWalletAddress as `0x${string}`,
+        chainId: base.id,
+        to: REACTOR_ADDRESS as `0x${string}`,
+        data: claimCalldata,
       });
       setClaimTxHash(hash);
       await waitForTransactionReceipt(wagmiConfig, { hash });
