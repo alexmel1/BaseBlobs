@@ -17,7 +17,10 @@ service cloud.firestore {
           'expPickIds',
           'lastUpdated',
           'rev'
-        ]);
+        ]) &&
+        (!('playerName' in request.resource.data) ||
+          (request.resource.data.playerName is string &&
+           request.resource.data.playerName.size() <= 20));
 
       // Обновление с клиента разрешено ТОЛЬКО для клиентских/косметических полей (playerName, selectedId, expPickId, expPickIds)
       // Все экономические и прогрессионные поля (cubes, blobs, energy, totalCubesAllTime, arenaSquadIds и т.д.) заблокированы.
@@ -32,7 +35,10 @@ service cloud.firestore {
           'expPickIds',
           'lastUpdated',
           'rev'
-        ]);
+        ]) &&
+        (!('playerName' in request.resource.data) ||
+          (request.resource.data.playerName is string &&
+           request.resource.data.playerName.size() <= 20));
 
       allow delete: if false;
     }

@@ -188,6 +188,41 @@ const ENERGY_PACKAGES: Record<string, { amount: number; price: number }> = {
   large: { amount: 300, price: 2200 },
 };
 
+// Rate limiter: max 20 requests per 10 seconds per authenticated wallet
+const RATE_LIMIT_WINDOW_MS = 10_000;
+const RATE_LIMIT_MAX_REQUESTS = 20;
+const walletRequestTimestamps = new Map<string, number[]>();
+
+function isRateLimited(walletAddress: string): boolean {
+  const now = Date.now();
+  const key = walletAddress.toLowerCase();
+  const timestamps = (walletRequestTimestamps.get(key) || []).filter(
+    (ts) => now - ts < RATE_LIMIT_WINDOW_MS
+  );
+
+  if (timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    walletRequestTimestamps.set(key, timestamps);
+    return true;
+  }
+
+  timestamps.push(now);
+  walletRequestTimestamps.set(key, timestamps);
+
+  // Periodically clean up stale entries if map gets large
+  if (walletRequestTimestamps.size > 5000) {
+    for (const [w, tsList] of walletRequestTimestamps.entries()) {
+      const active = tsList.filter((ts) => now - ts < RATE_LIMIT_WINDOW_MS);
+      if (active.length === 0) {
+        walletRequestTimestamps.delete(w);
+      } else {
+        walletRequestTimestamps.set(w, active);
+      }
+    }
+  }
+
+  return false;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -219,6 +254,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     verifySessionToken(authToken, walletAddress);
   } catch (sigErr: any) {
     return res.status(401).json({ error: sigErr.message || 'Session expired, please reconnect wallet' });
+  }
+
+  if (isRateLimited(walletAddress)) {
+    return res.status(429).json({ error: 'Too many requests, slow down' });
   }
 
   try {

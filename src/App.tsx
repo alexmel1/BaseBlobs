@@ -28,6 +28,7 @@ import {
   Code,
   BookOpen,
   Radio,
+  Loader2,
 } from 'lucide-react';
 
 import { GameState, Blob, ActiveExpedition, PersonalityType, ExpeditionEventType, TraitId, UpgradeBranchId } from './types';
@@ -706,6 +707,31 @@ export default function App() {
 
   // Track in-flight server expedition claims to avoid duplicate fetches
   const inFlightExpeditionClaimsRef = React.useRef<Set<string>>(new Set());
+
+  // Track in-flight user action requests to prevent duplicate clicks and drive loading/disabled UI
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+  const pendingActionsRef = React.useRef<Set<string>>(new Set());
+
+  const isActionPending = React.useCallback(
+    (key: string) => pendingActions.has(key),
+    [pendingActions]
+  );
+
+  const startPendingAction = (key: string): boolean => {
+    if (pendingActionsRef.current.has(key)) return false;
+    pendingActionsRef.current.add(key);
+    setPendingActions(new Set(pendingActionsRef.current));
+    return true;
+  };
+
+  const endPendingAction = (key: string) => {
+    if (pendingActionsRef.current.has(key)) {
+      pendingActionsRef.current.delete(key);
+      setPendingActions(new Set(pendingActionsRef.current));
+    }
+  };
+
+  const pendingUpgradeKey = Array.from(pendingActions).find((k) => k.startsWith('upgrade:')) || null;
   
 
   // ── Network Map ──
@@ -997,15 +1023,21 @@ export default function App() {
   }, [isWagmiConnected, wagmiAddress, processConnection, rawWalletAddress, triggerToast]);
 
   const handleConnectWalletType = async (type?: 'base' | 'metamask', address?: string) => {
-    if (address) {
-      processConnection(address);
-      return;
-    }
+    const actionKey = 'connectWallet';
+    if (!startPendingAction(actionKey)) return;
     try {
-      await appKit.open();
-    } catch (e) {
-      console.error('Failed to open AppKit modal:', e);
-      triggerToast('Failed to open wallet connection modal.');
+      if (address) {
+        processConnection(address);
+        return;
+      }
+      try {
+        await appKit.open();
+      } catch (e) {
+        console.error('Failed to open AppKit modal:', e);
+        triggerToast('Failed to open wallet connection modal.');
+      }
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
@@ -1049,22 +1081,24 @@ export default function App() {
 
   // Action: Execute summoning (called when signature is confirmed in modal)
   const handleExecuteSummon = async (): Promise<PersonalityType | null> => {
-    const blobCount = (state.blobs || []).length;
-    if (blobCount >= 10) {
-      triggerToast('You already have the maximum of 10 Blobs!');
-      return null;
-    }
-    const cost = 1500 + blobCount * 500;
-    if (state.cubes < cost) {
-      triggerToast(`Need ${cost} 💠 to Summon!`);
-      return null;
-    }
-    if (!rawWalletAddress || !syncId) {
-      triggerToast('Connect wallet to summon!');
-      return null;
-    }
-
+    const actionKey = 'summon';
+    if (!startPendingAction(actionKey)) return null;
     try {
+      const blobCount = (state.blobs || []).length;
+      if (blobCount >= 10) {
+        triggerToast('You already have the maximum of 10 Blobs!');
+        return null;
+      }
+      const cost = 1500 + blobCount * 500;
+      if (state.cubes < cost) {
+        triggerToast(`Need ${cost} 💠 to Summon!`);
+        return null;
+      }
+      if (!rawWalletAddress || !syncId) {
+        triggerToast('Connect wallet to summon!');
+        return null;
+      }
+
       const res = await fetchWithSession('/api/claim', {
         type: 'summon',
         syncId,
@@ -1084,22 +1118,26 @@ export default function App() {
     } catch (err: any) {
       console.error('Summon error:', err);
       throw err; // пусть SummonModal сам покажет реальный текст ошибки
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
   // Action: Execute paid USDC summoning
   const handleExecuteSummonPaid = async (txHash: string): Promise<PersonalityType | null> => {
-    const blobCount = (state.blobs || []).length;
-    if (blobCount >= 10) {
-      triggerToast('You already have the maximum of 10 Blobs!');
-      return null;
-    }
-    if (!rawWalletAddress || !syncId) {
-      triggerToast('Connect wallet to summon!');
-      return null;
-    }
-
+    const actionKey = 'summon';
+    if (!startPendingAction(actionKey)) return null;
     try {
+      const blobCount = (state.blobs || []).length;
+      if (blobCount >= 10) {
+        triggerToast('You already have the maximum of 10 Blobs!');
+        return null;
+      }
+      if (!rawWalletAddress || !syncId) {
+        triggerToast('Connect wallet to summon!');
+        return null;
+      }
+
       const res = await fetchWithSession('/api/claim', {
         type: 'summon_paid',
         syncId,
@@ -1119,26 +1157,30 @@ export default function App() {
     } catch (err: any) {
       console.error('Paid summon error:', err);
       throw err;
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
   // Action: Unlock a specific species directly (costs 3000 cubes)
   const handleUnlockSpecies = async (personality: PersonalityType) => {
-    const alreadyOwned = state.blobs.some((b) => b.personality === personality);
-    if (alreadyOwned) {
-      triggerToast(`You already own the ${P[personality].name} species!`);
-      return;
-    }
-    if (state.cubes < 3000) {
-      triggerToast('Need 3000 💠 to Unlock Species!');
-      return;
-    }
-    if (!rawWalletAddress || !syncId) {
-      triggerToast('Connect wallet to unlock species!');
-      return;
-    }
-
+    const actionKey = `unlockSpecies:${personality}`;
+    if (!startPendingAction(actionKey)) return;
     try {
+      const alreadyOwned = state.blobs.some((b) => b.personality === personality);
+      if (alreadyOwned) {
+        triggerToast(`You already own the ${P[personality].name} species!`);
+        return;
+      }
+      if (state.cubes < 3000) {
+        triggerToast('Need 3000 💠 to Unlock Species!');
+        return;
+      }
+      if (!rawWalletAddress || !syncId) {
+        triggerToast('Connect wallet to unlock species!');
+        return;
+      }
+
       const res = await fetchWithSession('/api/claim', {
         type: 'unlock_species',
         syncId,
@@ -1160,17 +1202,21 @@ export default function App() {
     } catch (err: any) {
       console.error('Unlock species error:', err);
       triggerToast(`❌ Unlock failed: ${err.message}`);
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
   // Action: Upgrade a specific branch on a blob
   const handleUpgradeBlob = async (blobId: string, branch: UpgradeBranchId) => {
-    if (!rawWalletAddress || !syncId) {
-      triggerToast('Connect wallet to upgrade blob!');
-      return;
-    }
-
+    const actionKey = `upgrade:${blobId}:${branch}`;
+    if (!startPendingAction(actionKey)) return;
     try {
+      if (!rawWalletAddress || !syncId) {
+        triggerToast('Connect wallet to upgrade blob!');
+        return;
+      }
+
       const res = await fetchWithSession('/api/claim', {
         type: 'upgrade_blob',
         syncId,
@@ -1191,6 +1237,8 @@ export default function App() {
     } catch (err: any) {
       console.error('Upgrade blob error:', err);
       triggerToast(`❌ Upgrade failed: ${err.message}`);
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
@@ -1216,17 +1264,19 @@ export default function App() {
 
   // Action: Buy energy refill from market
   const handleBuyEnergy = async (packageId: string = 'small') => {
-    const pkg = packageId === 'medium' ? { amount: 120, price: 1000 } : packageId === 'large' ? { amount: 300, price: 2200 } : { amount: 50, price: 1500 };
-    if (state.cubes < pkg.price) {
-      triggerToast(`Need ${pkg.price} 💠 Cubes!`);
-      return;
-    }
-    if (!rawWalletAddress || !syncId) {
-      triggerToast('Connect wallet to buy energy!');
-      return;
-    }
-
+    const actionKey = `buyEnergy:${packageId}`;
+    if (!startPendingAction(actionKey)) return;
     try {
+      const pkg = packageId === 'medium' ? { amount: 120, price: 1000 } : packageId === 'large' ? { amount: 300, price: 2200 } : { amount: 50, price: 1500 };
+      if (state.cubes < pkg.price) {
+        triggerToast(`Need ${pkg.price} 💠 Cubes!`);
+        return;
+      }
+      if (!rawWalletAddress || !syncId) {
+        triggerToast('Connect wallet to buy energy!');
+        return;
+      }
+
       const res = await fetchWithSession('/api/claim', {
         type: 'buy_energy',
         syncId,
@@ -1245,46 +1295,50 @@ export default function App() {
     } catch (err: any) {
       console.error('Buy energy error:', err);
       triggerToast(`❌ Purchase failed: ${err.message}`);
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
   // Action: Start expedition
   const handleStartExpedition = async (zoneId: string) => {
-    const zone = ZONES.find((z) => z.id === zoneId);
-    if (!zone) return;
-
-    const pickedBlobs = getExpPickBlobs();
-    if (pickedBlobs.length === 0) {
-      triggerToast('No blob selected!');
-      return;
-    }
-
-    const isUnderleveled = pickedBlobs.some((b) => b.level < zone.unlockLv);
-    if (isUnderleveled) {
-      triggerToast(`All selected blobs must be at least Lv.${zone.unlockLv}!`);
-      return;
-    }
-
-    // Check if any of the selected blobs are already busy on an expedition
-    const isAnyBlobBusy = pickedBlobs.some((b) => {
-      return state.activeExpeditions?.some((exp) => exp.blobIds?.includes(b.id) || exp.blobId === b.id);
-    });
-    if (isAnyBlobBusy) {
-      triggerToast('One or more selected blobs are already away on an expedition!');
-      return;
-    }
-
-    if (state.energy < zone.cost) {
-      triggerToast(`Not enough ⚡ energy! Need ${zone.cost}`);
-      return;
-    }
-
-    if (!rawWalletAddress || !syncId) {
-      triggerToast('Connect wallet to start expedition!');
-      return;
-    }
-
+    const actionKey = `startExpedition:${zoneId}`;
+    if (!startPendingAction(actionKey)) return;
     try {
+      const zone = ZONES.find((z) => z.id === zoneId);
+      if (!zone) return;
+
+      const pickedBlobs = getExpPickBlobs();
+      if (pickedBlobs.length === 0) {
+        triggerToast('No blob selected!');
+        return;
+      }
+
+      const isUnderleveled = pickedBlobs.some((b) => b.level < zone.unlockLv);
+      if (isUnderleveled) {
+        triggerToast(`All selected blobs must be at least Lv.${zone.unlockLv}!`);
+        return;
+      }
+
+      // Check if any of the selected blobs are already busy on an expedition
+      const isAnyBlobBusy = pickedBlobs.some((b) => {
+        return state.activeExpeditions?.some((exp) => exp.blobIds?.includes(b.id) || exp.blobId === b.id);
+      });
+      if (isAnyBlobBusy) {
+        triggerToast('One or more selected blobs are already away on an expedition!');
+        return;
+      }
+
+      if (state.energy < zone.cost) {
+        triggerToast(`Not enough ⚡ energy! Need ${zone.cost}`);
+        return;
+      }
+
+      if (!rawWalletAddress || !syncId) {
+        triggerToast('Connect wallet to start expedition!');
+        return;
+      }
+
       const primaryBlobId = pickedBlobs[0].id;
       const res = await fetchWithSession('/api/claim', {
         type: 'start_expedition',
@@ -1322,6 +1376,8 @@ export default function App() {
     } catch (err: any) {
       console.error('Start expedition error:', err);
       triggerToast(`❌ Start expedition failed: ${err.message}`);
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
@@ -1344,8 +1400,10 @@ export default function App() {
 
   // Update trainer name
   const handleSaveName = (newName: string) => {
+    const trimmed = newName.trim().slice(0, 20);
+    if (!trimmed) return;
     updateState((prev) => {
-      prev.playerName = newName;
+      prev.playerName = trimmed;
       return prev;
     });
     setIsNameModalOpen(false);
@@ -1354,11 +1412,13 @@ export default function App() {
 
   // ── Collect All Nodes Handler ──
   const handleCollectAllNodes = async () => {
-    if (!rawWalletAddress) {
-      triggerToast("🔌 Please connect your wallet first!");
-      return;
-    }
+    const actionKey = 'collectNodes';
+    if (!startPendingAction(actionKey)) return;
     try {
+      if (!rawWalletAddress) {
+        triggerToast("🔌 Please connect your wallet first!");
+        return;
+      }
       const { earned, error } = await networkMap.collectAll();
       if (earned > 0) {
         triggerToast(`💠 Collected all nodes! Total: +${earned.toLocaleString('en-US')} Cubes!`);
@@ -1370,6 +1430,8 @@ export default function App() {
     } catch (e) {
       console.error(e);
       triggerToast("❌ Error collecting from nodes.");
+    } finally {
+      endPendingAction(actionKey);
     }
   };
 
@@ -1553,13 +1615,20 @@ export default function App() {
           </div>
         </div>
         <button
+          disabled={isActionPending('connectWallet')}
           onClick={() => {
             setInitialConnectType(null);
             setIsWalletModalOpen(true);
           }}
-          className="flex items-center gap-1 px-2 py-0.5 bg-blue-600/10 hover:bg-blue-600/20 active:scale-95 border border-blue-500/25 rounded-full text-[7.5px] font-bold text-[#00cfff] cursor-pointer transition-all font-mono"
+          className={`flex items-center gap-1 px-2 py-0.5 bg-blue-600/10 hover:bg-blue-600/20 active:scale-95 border border-blue-500/25 rounded-full text-[7.5px] font-bold text-[#00cfff] transition-all font-mono ${
+            isActionPending('connectWallet') ? 'opacity-60 cursor-wait' : 'cursor-pointer'
+          }`}
         >
-          <Wallet className="w-2 h-2 text-[#00cfff]" />
+          {isActionPending('connectWallet') ? (
+            <Loader2 className="w-2 h-2 animate-spin text-[#00cfff]" />
+          ) : (
+            <Wallet className="w-2 h-2 text-[#00cfff]" />
+          )}
           <span>{walletAddress ? walletAddress : 'Connect Base Wallet'}</span>
         </button>
       </div>
@@ -1818,49 +1887,54 @@ export default function App() {
                 </span>
               </button>
 
-              {networkMap.myNodes && networkMap.myNodes.length > 0 && (
-                <button
-                  onClick={handleCollectAllNodes}
-                  disabled={networkMap.totalPending <= 0}
-                  className={`group relative w-full flex items-center gap-3 p-3 rounded-2xl bg-[#03130f]/90 border transition-all duration-200 text-left overflow-hidden ${
-                    networkMap.totalPending > 0
-                      ? 'border-emerald-400/30 hover:border-emerald-400/60 active:scale-[0.985] cursor-pointer'
-                      : 'border-white/8 opacity-55 cursor-not-allowed'
-                  }`}
-                  style={networkMap.totalPending > 0 ? { boxShadow: '0 0 20px rgba(16,185,129,0.07)' } : undefined}
-                >
-                  <span
-                    className={`absolute left-0 top-0 bottom-0 w-[3px] ${
-                      networkMap.totalPending > 0
-                        ? 'bg-gradient-to-b from-emerald-500 to-teal-300'
-                        : 'bg-white/10'
+              {networkMap.myNodes && networkMap.myNodes.length > 0 && (() => {
+                const isCollecting = isActionPending('collectNodes') || networkMap.isLoading;
+                const isCollectDisabled = networkMap.totalPending <= 0 || isCollecting;
+
+                return (
+                  <button
+                    onClick={handleCollectAllNodes}
+                    disabled={isCollectDisabled}
+                    className={`group relative w-full flex items-center gap-3 p-3 rounded-2xl bg-[#03130f]/90 border transition-all duration-200 text-left overflow-hidden ${
+                      !isCollectDisabled
+                        ? 'border-emerald-400/30 hover:border-emerald-400/60 active:scale-[0.985] cursor-pointer'
+                        : 'border-white/8 opacity-55 cursor-not-allowed'
                     }`}
-                  />
-
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-400/25 flex items-center justify-center flex-shrink-0 text-base">
-                    🌐
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="text-white text-[12px] font-black tracking-tight">
-                      Collect Node Income
-                    </div>
-                    <div className="text-slate-500 text-[9px] font-mono mt-0.5 truncate">
-                      {networkMap.myNodes.length} {networkMap.myNodes.length === 1 ? 'node' : 'nodes'} · {networkMap.totalIncome}/hr
-                    </div>
-                  </div>
-
-                  <div
-                    className={`px-2.5 py-1 rounded-lg font-mono font-black text-[11px] flex-shrink-0 border ${
-                      networkMap.totalPending > 0
-                        ? 'bg-emerald-500/12 border-emerald-400/35 text-emerald-300'
-                        : 'bg-white/5 border-white/10 text-slate-500'
-                    }`}
+                    style={!isCollectDisabled ? { boxShadow: '0 0 20px rgba(16,185,129,0.07)' } : undefined}
                   >
-                    {networkMap.totalPending > 0 ? `+${formatNumber(networkMap.totalPending)} 💠` : 'Empty'}
-                  </div>
-                </button>
-              )}
+                    <span
+                      className={`absolute left-0 top-0 bottom-0 w-[3px] ${
+                        !isCollectDisabled
+                          ? 'bg-gradient-to-b from-emerald-500 to-teal-300'
+                          : 'bg-white/10'
+                      }`}
+                    />
+
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-400/25 flex items-center justify-center flex-shrink-0 text-base">
+                      {isCollecting ? <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" /> : '🌐'}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white text-[12px] font-black tracking-tight">
+                        {isCollecting ? 'Collecting Node Income...' : 'Collect Node Income'}
+                      </div>
+                      <div className="text-slate-500 text-[9px] font-mono mt-0.5 truncate">
+                        {networkMap.myNodes.length} {networkMap.myNodes.length === 1 ? 'node' : 'nodes'} · {networkMap.totalIncome}/hr
+                      </div>
+                    </div>
+
+                    <div
+                      className={`px-2.5 py-1 rounded-lg font-mono font-black text-[11px] flex-shrink-0 border ${
+                        !isCollectDisabled
+                          ? 'bg-emerald-500/12 border-emerald-400/35 text-emerald-300'
+                          : 'bg-white/5 border-white/10 text-slate-500'
+                      }`}
+                    >
+                      {isCollecting ? 'Syncing...' : networkMap.totalPending > 0 ? `+${formatNumber(networkMap.totalPending)} 💠` : 'Empty'}
+                    </div>
+                  </button>
+                );
+              })()}
             </div>
 
             {/* Owned Blobs section */}
@@ -1950,26 +2024,33 @@ export default function App() {
             </div>
 
             {/* Network income — show only if there are nodes */}
-            {networkMap.myNodes.length > 0 && (
-              <div className="mx-4 mt-2 p-3 rounded-2xl border border-blue-500/20 bg-blue-900/8 flex items-center justify-between">
-                <div>
-                  <p className="text-slate-400 text-[10px] uppercase tracking-wider">Network Income</p>
-                  <p className="text-white font-bold text-sm mt-0.5">
-                    💠 {networkMap.totalIncome}/hr · {networkMap.myNodes.length} nodes
-                  </p>
+            {networkMap.myNodes.length > 0 && (() => {
+              const isCollecting = isActionPending('collectNodes') || networkMap.isLoading;
+              return (
+                <div className="mx-4 mt-2 p-3 rounded-2xl border border-blue-500/20 bg-blue-900/8 flex items-center justify-between">
+                  <div>
+                    <p className="text-slate-400 text-[10px] uppercase tracking-wider">Network Income</p>
+                    <p className="text-white font-bold text-sm mt-0.5">
+                      💠 {networkMap.totalIncome}/hr · {networkMap.myNodes.length} nodes
+                    </p>
+                  </div>
+                  {networkMap.totalPending > 0 ? (
+                    <button
+                      onClick={handleCollectAllNodes}
+                      disabled={isCollecting}
+                      className={`px-4 py-2 rounded-xl bg-blue-600/80 border border-blue-400/50 text-white text-xs font-bold active:scale-95 transition-all flex items-center gap-1.5 ${
+                        isCollecting ? 'opacity-60 cursor-wait' : 'cursor-pointer'
+                      }`}
+                    >
+                      {isCollecting && <Loader2 className="w-3 h-3 animate-spin" />}
+                      <span>{isCollecting ? 'Collecting...' : `Collect +${networkMap.totalPending} 💠`}</span>
+                    </button>
+                  ) : (
+                    <span className="text-slate-500 text-xs font-semibold">Nothing pending</span>
+                  )}
                 </div>
-                {networkMap.totalPending > 0 ? (
-                  <button
-                    onClick={handleCollectAllNodes}
-                    className="px-4 py-2 rounded-xl bg-blue-600/80 border border-blue-400/50 text-white text-xs font-bold active:scale-95 transition-all cursor-pointer"
-                  >
-                    Collect +{networkMap.totalPending} 💠
-                  </button>
-                ) : (
-                  <span className="text-slate-500 text-xs font-semibold">Nothing pending</span>
-                )}
-              </div>
-            )}
+              );
+            })()}
 
             {/* Selected Blob — stat card */}
             {currentSelectedBlob && (() => {
@@ -2283,7 +2364,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Zones Grid list */}
+             {/* Zones Grid list */}
             <div className="flex flex-col gap-2.5 pb-6">
               {ZONES.map((zone) => {
                 const pickedBlobs = getExpPickBlobs();
@@ -2291,6 +2372,9 @@ export default function App() {
                   return state.activeExpeditions?.some((exp) => exp.blobIds?.includes(b.id) || exp.blobId === b.id);
                 });
                 const isUnderleveled = pickedBlobs.some((b) => b.level < zone.unlockLv);
+                const isThisExpeditionPending = isActionPending(`startExpedition:${zone.id}`);
+                const isAnyExpeditionPending = Array.from(pendingActions).some((k) => k.startsWith('startExpedition:'));
+                const isCardDisabled = isUnderleveled || isAnyExpeditionPending;
 
                  const tierData = [
                   { 
@@ -2354,8 +2438,8 @@ export default function App() {
                   <div
                     key={zone.id}
                     onClick={() => {
-                      if (isUnderleveled) {
-                        triggerToast(`Requires level ${zone.unlockLv} blob!`);
+                      if (isCardDisabled) {
+                        if (isUnderleveled) triggerToast(`Requires level ${zone.unlockLv} blob!`);
                         return;
                       }
                       if (isAnyBlobBusy) {
@@ -2365,7 +2449,7 @@ export default function App() {
                       handleStartExpedition(zone.id);
                     }}
                     className={`flex items-center gap-3 p-3 rounded-2xl border bg-[#0b0f2a] bg-gradient-to-r ${tierData.bgGradient} ${tierData.borderColor} ${tierData.glowColor} transition-all relative overflow-hidden group ${
-                      isUnderleveled ? 'opacity-85 cursor-not-allowed' : 'hover:scale-[1.015] hover:translate-x-0.5 hover:brightness-110 active:scale-95 cursor-pointer'
+                      isCardDisabled ? 'opacity-80 cursor-not-allowed' : 'hover:scale-[1.015] hover:translate-x-0.5 hover:brightness-110 active:scale-95 cursor-pointer'
                     }`}
                   >
                     {/* Color Accent Indicator Strip on Left */}
@@ -2382,7 +2466,11 @@ export default function App() {
                         borderColor: `${tierData.color}25` 
                       }}
                     >
-                      {zone.icon}
+                      {isThisExpeditionPending ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-[#00cfff]" />
+                      ) : (
+                        zone.icon
+                      )}
                     </div>
 
                     <div className="flex-1 min-w-0">
@@ -2423,13 +2511,18 @@ export default function App() {
                       <div className="text-[8px] text-[#00ccff] font-mono">
                         +{zone.xp} XP
                       </div>
-                      {isUnderleveled && (
+                      {isThisExpeditionPending && (
+                        <div className="text-[8px] text-cyan-300 font-bold flex items-center gap-1 mt-0.5">
+                          <span>Dispatching…</span>
+                        </div>
+                      )}
+                      {isUnderleveled && !isThisExpeditionPending && (
                         <div className="text-[8px] text-[#ff8800] flex items-center gap-0.5 mt-0.5">
                           <Lock className="w-2 h-2" />
                           <span>Lv.{zone.unlockLv} req</span>
                         </div>
                       )}
-                      {isAnyBlobBusy && !isUnderleveled && (
+                      {isAnyBlobBusy && !isUnderleveled && !isThisExpeditionPending && (
                         <div className="text-[8px] text-slate-400 font-semibold mt-0.5">Away…</div>
                       )}
                     </div>
@@ -2545,6 +2638,7 @@ export default function App() {
                 selectedBlob={currentSelectedBlob}
                 cubes={state.cubes}
                 onUpgrade={handleUpgradeBlob}
+                pendingUpgradeKey={pendingUpgradeKey}
               />
             </div>
           </div>
@@ -2684,42 +2778,53 @@ export default function App() {
               </p>
 
               {/* Buy Energy Card */}
-              <div
-                onClick={() => handleBuyEnergy('small')}
-                className="group"
-                style={{
-                  background: 'rgba(0,0,0,0.35)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 14,
-                  padding: 16,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                  cursor: 'pointer',
-                }}
-              >
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/15 via-orange-500/20 to-transparent border border-orange-400/35 flex items-center justify-center relative overflow-hidden shadow-lg shadow-orange-500/5 flex-shrink-0 group-hover:border-orange-400/60 transition-colors duration-300">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(249,115,22,0.15)_0%,transparent_70%)] animate-pulse" />
-                  <Zap className="w-6 h-6 text-amber-400 fill-amber-400/20 relative z-10 animate-bounce" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>Refill +50 Energy</p>
-                  <p style={{ color: 'rgba(180,200,255,0.5)', fontSize: 10, marginTop: 3 }}>
-                    Instantly adds 50 energy to your pool
-                  </p>
-                </div>
-                <div style={{
-                  background: 'rgba(200,100,0,0.2)',
-                  border: '1px solid rgba(255,140,0,0.25)',
-                  borderRadius: 8,
-                  padding: '5px 12px',
-                  color: '#ffaa44',
-                  fontSize: 12,
-                  fontWeight: 700,
-                }}>
-                  1500 💠
-                </div>
-              </div>
+              {(() => {
+                const isBuyingEnergy = isActionPending('buyEnergy:small') || isActionPending('buyEnergy');
+                const isEnergyDisabled = isBuyingEnergy || state.cubes < 1500;
+                return (
+                  <div
+                    onClick={() => !isEnergyDisabled && handleBuyEnergy('small')}
+                    className={`group transition-all ${isEnergyDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                    style={{
+                      background: 'rgba(0,0,0,0.35)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 14,
+                      padding: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 14,
+                    }}
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/15 via-orange-500/20 to-transparent border border-orange-400/35 flex items-center justify-center relative overflow-hidden shadow-lg shadow-orange-500/5 flex-shrink-0 group-hover:border-orange-400/60 transition-colors duration-300">
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(249,115,22,0.15)_0%,transparent_70%)] animate-pulse" />
+                      {isBuyingEnergy ? (
+                        <Loader2 className="w-6 h-6 text-amber-400 animate-spin relative z-10" />
+                      ) : (
+                        <Zap className="w-6 h-6 text-amber-400 fill-amber-400/20 relative z-10 animate-bounce" />
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>
+                        {isBuyingEnergy ? 'Refilling Energy...' : 'Refill +50 Energy'}
+                      </p>
+                      <p style={{ color: 'rgba(180,200,255,0.5)', fontSize: 10, marginTop: 3 }}>
+                        Instantly adds 50 energy to your pool
+                      </p>
+                    </div>
+                    <div style={{
+                      background: 'rgba(200,100,0,0.2)',
+                      border: '1px solid rgba(255,140,0,0.25)',
+                      borderRadius: 8,
+                      padding: '5px 12px',
+                      color: '#ffaa44',
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}>
+                      1500 💠
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Energy Info Section */}
@@ -2971,6 +3076,7 @@ export default function App() {
                 selectedBlob={currentSelectedBlob}
                 cubes={state.cubes}
                 onUpgrade={handleUpgradeBlob}
+                pendingUpgradeKey={pendingUpgradeKey}
               />
             </div>
           </div>

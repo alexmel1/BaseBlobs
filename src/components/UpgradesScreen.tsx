@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import { Blob, UpgradeBranchId } from '../types';
 import { UPGRADES, EVOLUTION_NAMES, EVOLUTION_EMOJIS, canUpgrade, getEvolutionStage, getUpgradeSlots, getBlobBranches } from '../data';
 
@@ -6,9 +7,10 @@ interface Props {
   selectedBlob: Blob;
   cubes: number;
   onUpgrade: (blobId: string, branch: UpgradeBranchId) => void;
+  pendingUpgradeKey?: string | null;
 }
 
-export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade }) => {
+export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade, pendingUpgradeKey }) => {
   const stage = getEvolutionStage(selectedBlob.level);
   const slots = getUpgradeSlots(selectedBlob.level);
 
@@ -147,25 +149,40 @@ export const UpgradesScreen: React.FC<Props> = ({ selectedBlob, cubes, onUpgrade
                     </p>
                   )}
                 </div>
-                <button
-                  disabled={!check.allowed}
-                  onClick={() => check.allowed && onUpgrade(selectedBlob.id, branch.id)}
-                  style={{
-                    padding: '7px 14px',
-                    borderRadius: 10,
-                    border: 'none',
-                    background: check.allowed
-                      ? `linear-gradient(90deg, ${branch.color}cc, ${branch.color})`
-                      : 'rgba(255,255,255,0.08)',
-                    color: check.allowed ? '#fff' : 'rgba(255,255,255,0.3)',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: check.allowed ? 'pointer' : 'not-allowed',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {nextLevel.cost} 💠
-                </button>
+                {(() => {
+                  const thisUpgradeKey = `upgrade:${selectedBlob.id}:${branch.id}`;
+                  const isThisPending = pendingUpgradeKey === thisUpgradeKey;
+                  const isAnyPending = Boolean(pendingUpgradeKey);
+                  const isBtnDisabled = !check.allowed || isAnyPending;
+
+                  return (
+                    <button
+                      disabled={isBtnDisabled}
+                      onClick={() => !isBtnDisabled && onUpgrade(selectedBlob.id, branch.id)}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: check.allowed && !isAnyPending
+                          ? `linear-gradient(90deg, ${branch.color}cc, ${branch.color})`
+                          : 'rgba(255,255,255,0.08)',
+                        color: check.allowed && !isAnyPending ? '#fff' : 'rgba(255,255,255,0.3)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: isBtnDisabled ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        opacity: isAnyPending && !isThisPending ? 0.5 : 1,
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      {isThisPending && <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />}
+                      <span>{isThisPending ? 'Upgrading...' : `${nextLevel.cost} 💠`}</span>
+                    </button>
+                  );
+                })()}
               </div>
             )}
 

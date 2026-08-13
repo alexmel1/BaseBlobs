@@ -62,7 +62,9 @@ export function verifySessionToken(token: string, expectedAddress: string) {
   }
   const [payload, sig] = parts;
   const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-  if (sig !== expectedSig) {
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
     console.error('[verifySessionToken] Error: Invalid session token signature', {
       receivedSig: sig,
       expectedSig,
