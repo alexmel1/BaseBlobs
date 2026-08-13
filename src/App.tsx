@@ -1216,7 +1216,7 @@ export default function App() {
 
   // Action: Buy energy refill from market
   const handleBuyEnergy = async (packageId: string = 'small') => {
-    const pkg = packageId === 'medium' ? { amount: 120, price: 1000 } : packageId === 'large' ? { amount: 300, price: 2200 } : { amount: 50, price: 500 };
+    const pkg = packageId === 'medium' ? { amount: 120, price: 1000 } : packageId === 'large' ? { amount: 300, price: 2200 } : { amount: 50, price: 1500 };
     if (state.cubes < pkg.price) {
       triggerToast(`Need ${pkg.price} 💠 Cubes!`);
       return;
@@ -2717,7 +2717,7 @@ export default function App() {
                   fontSize: 12,
                   fontWeight: 700,
                 }}>
-                  500 💠
+                  1500 💠
                 </div>
               </div>
             </div>

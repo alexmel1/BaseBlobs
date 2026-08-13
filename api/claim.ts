@@ -183,7 +183,7 @@ function rollExpeditionEvent(): typeof EXPEDITION_EVENTS[ExpeditionEventType] {
 }
 
 const ENERGY_PACKAGES: Record<string, { amount: number; price: number }> = {
-  small: { amount: 50, price: 500 },
+  small: { amount: 50, price: 1500 },
   medium: { amount: 120, price: 1000 },
   large: { amount: 300, price: 2200 },
 };
